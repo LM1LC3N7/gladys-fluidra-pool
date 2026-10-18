@@ -11,13 +11,20 @@ Gladys through
 [`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
 its only runtime dependency. It started from the official JavaScript template.
 
+It brings the Fluidra Pool equipment (AstralPool, Zodiac…) into Gladys through
+the Fluidra cloud (unofficial API, ported from foXaCe/Fluidra-pool, MIT). Read
+`TODO.md` "Decisions" before touching a profile or a command: a register is
+only read under a profile its users checked, commands stay behind
+`allow_commands`, no chemical dosing command, a fresh read before acting, the
+3.5 s deadline.
+
 ## Commands
 
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/fluidra.test.js          # one file
+node --test --test-name-pattern "pump"    # tests whose name matches
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
 npm run format                            # Prettier, fix in place
@@ -31,16 +38,19 @@ pushing.
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
-src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
+index.js                          SDK wiring only (src/handlers.js registers before connect())
+src/handlers.js                   the SDK handlers -> FluidraApp (shared with the tests)
+src/app.js                        FluidraApp: polling, stops/pauses, commands and their safety
+src/client.js                     the Fluidra API (pools, tree, components, write) and the tokens
+src/cognito.js                    AWS Cognito sign-in and refresh
+src/fluidra.js                    answers checked, profiles, identification, decoding (pure)
+src/devices.js                    -> Gladys devices and states (pure)
+src/store.js                      /data: tokens, pauses, stops
+src/publisher.js                  states within the Gladys limits
+src/config.js                     DEFAULTS (mirror the manifest defaults) + normalization
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
 docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
-test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+test/                             node --test, the SDK's fake Gladys + a fake Fluidra cloud
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 

@@ -1,67 +1,147 @@
-# Template de démonstration
+# Fluidra Pool
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Intégration non officielle, sans lien avec Fluidra. Elle amène dans Gladys les
+équipements de piscine reliés à l'application **Fluidra Pool** (AstralPool,
+Zodiac et autres marques du groupe Fluidra), par le cloud Fluidra, celui
+qu'utilise l'application.
+
+> **Attention : API non officielle, cette intégration n'a jamais été testée
+> avec un vrai compte ni un vrai équipement.** Elle a été écrite à partir de
+> l'intégration Home Assistant Fluidra-pool (foXaCe) et testée contre un faux
+> cloud Fluidra seulement. Fluidra peut changer son API à tout moment. Les
+> retours sont les bienvenus.
 
 ## Ce que vous obtenez
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+Fluidra ne donne pas de modèle : chaque appareil expose des registres
+numérotés dont le sens change avec la famille. L'intégration ne lit que les
+familles dont les registres ont été vérifiés par des utilisateurs de
+l'intégration Home Assistant. **Un équipement non reconnu est compté dans
+l'état de l'intégration mais jamais lu** : aucune valeur n'est affichée sous un
+faux nom.
 
-## Configuration
+| Équipement                                                                             | Fonctionnalités                                                                                                                  |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Électrolyseurs tecnoLC2 (Energy Connect, Clear Connect, Ei2 iQ, GenSalt OE iQ, iSalt…) | Température de l'eau, pH, redox (ORP), salinité (g/L), chlore libre (mg/L) si la sonde existe, consigne et production réelle (%) |
+| Électrolyseurs domoticS2 (Elite Connect, Neolysis…), eXO iQ, eXPERT (tecno2)           | Selon la famille : température, pH, redox, salinité, chlore libre, consigne et production (%)                                    |
+| Analyseurs Blue Connect (Silver, Gold)                                                 | Température, pH, redox ; salinité sur le Gold                                                                                    |
+| Pompe de filtration E30iQ (et Inari VS, Verdon VS)                                     | En marche, mode automatique (programmation), **vitesse** (arrêt, lente, moyenne, rapide, automatique)                            |
+| Pompe Victoria Smart Connect VS                                                        | En marche, vitesse (%), puissance (W)                                                                                            |
+| Pompes à chaleur Z250iQ, Z260iQ, Z350iQ, Z550iQ(+), Z650iQ, Eco Elyo (LG), Gre HPGIC   | En marche, température de l'eau, température de l'air (selon le modèle), **consigne**, mode (texte)                              |
+| Éclairage LumiPlus Connect                                                             | **Éclairage** (allumé/éteint)                                                                                                    |
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+Une sonde absente (pas de redox, pas de chlore libre) ne crée pas de
+fonctionnalité : elle n'apparaît que lorsqu'une vraie valeur a été lue. Un pH,
+un redox ou une salinité à 0 est traité comme « pas de mesure ».
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+Le badge de chaque appareil affiche « cloud », ou « injoignable » (avec un
+point orange) quand cet appareil n'a pas pu être lu, ou quand Fluidra le dit
+déconnecté deux lectures de suite.
 
-## Actions
+## Installation
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+1. Vos équipements doivent fonctionner dans l'application **Fluidra Pool**.
+2. Dans Gladys, installez l'intégration Fluidra Pool, saisissez l'**e-mail**
+   et le **mot de passe** de l'application Fluidra Pool, puis enregistrez.
+3. Ajoutez les équipements depuis l'onglet **Découverte**.
 
-## Scènes
+La connexion en deux étapes (code par SMS ou par e-mail) n'est pas gérée :
+désactivez-la dans l'application si elle est active.
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+## Commandes et sécurité
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+Les commandes sont **désactivées par défaut** : tout est affiché, rien n'est
+modifié. Activez **Autoriser les commandes depuis Gladys** pour permettre :
 
-## Tableau de bord
+- la **vitesse de la pompe** E30iQ (une liste : arrêt, lente, moyenne,
+  rapide). Choisir une vitesse sur une pompe arrêtée la démarre puis règle la
+  vitesse. Refusé quand la pompe suit sa programmation (mode automatique) :
+  ce mode se règle dans l'application ;
+- l'**éclairage** LumiPlus (allumer, éteindre) ;
+- la **consigne de la pompe à chaleur**, dans la plage de son modèle et
+  **35 °C au plus**, par pas de 1 °C (0,5 °C sur la Z650iQ).
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+**Aucune commande de dosage chimique** (pH, chlore, production de
+l'électrolyseur, boost) : un mauvais dosage met les baigneurs en danger, et
+l'intégration n'a jamais été testée sur un vrai équipement. Ces valeurs sont
+seulement affichées.
 
-## Dépannage
+Avant chaque commande, l'intégration **relit l'appareil** dans le cloud : la
+commande est refusée si cette lecture échoue ou ne donne pas la valeur, et elle
+n'envoie rien si l'appareil est déjà dans l'état demandé. L'autorisation est
+vérifiée de nouveau juste avant l'envoi. Les commandes d'un même appareil
+passent une à la fois. Une commande qui ne peut pas être envoyée dans les
+**3,5 secondes** suivant son arrivée est refusée (Gladys affiche un échec au
+bout de 5 secondes). Si Fluidra ne répond pas à temps, Gladys affiche
+« Commande envoyée, sans confirmation de Fluidra » : vérifiez l'état de
+l'appareil, il est relu dans les secondes qui suivent.
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+Activées, ces commandes peuvent être lancées par une scène ou un tableau de
+bord en votre absence : arrêter la filtration, par exemple, arrête aussi la
+circulation vers l'électrolyseur et la pompe à chaleur.
+
+## Mot de passe, jetons et vie privée
+
+- Le mot de passe est **gardé par Gladys dans sa base, jamais réaffiché, et
+  envoyé seulement à Fluidra** (son service de connexion AWS Cognito, en
+  HTTPS), comme le fait l'application.
+- La connexion donne des jetons : le jeton d'accès (environ une heure) est
+  renouvelé avec le jeton de rafraîchissement, sans le mot de passe, 5 minutes
+  avant sa fin. Les jetons sont gardés dans le volume `/data` de l'intégration
+  (fichier lisible par l'utilisateur du conteneur seulement) pour qu'un
+  redémarrage ne se reconnecte pas. Sur l'hôte de Gladys, ce volume est le
+  dossier `<dossier de base de Gladys>/external-integrations/<sélecteur>`,
+  **absent des sauvegardes de Gladys**, supprimé à la désinstallation.
+  **Le jeton de rafraîchissement donne accès au compte** tant qu'il est
+  valable : protégez cet hôte. L'e-mail et le mot de passe n'y sont jamais
+  écrits ; changer d'e-mail efface les jetons.
+- Rien n'apparaît dans les journaux : ni mot de passe, ni jeton, ni e-mail, ni
+  numéro de série complet (seulement ses 4 derniers caractères).
+- Tout passe en HTTPS vers `cognito-idp.eu-west-1.amazonaws.com` (la
+  connexion) et `api.fluidra-emea.com` (les équipements). L'intégration se
+  présente comme « gladys-fluidra-pool » : elle ne se fait pas passer pour
+  l'application.
+
+## Rafraîchissement
+
+Le compte est lu toutes les 60 secondes par défaut (60 à 900) : la liste des
+piscines, les équipements de chaque piscine, puis les registres de chaque
+équipement reconnu (une requête par équipement). Trois lectures suivent une
+commande (après 5, 20 et 60 secondes).
+
+## Erreurs
+
+- **Mot de passe refusé** (ou compte non confirmé) : l'intégration s'arrête ;
+  un nouvel essai après 1 h, 6 h, puis toutes les 24 h, ou aussitôt quand vous
+  enregistrez la configuration ou cliquez sur **Tester la connexion**.
+- **Code de vérification, ou toute autre étape de connexion** (sauf un nouveau
+  mot de passe) : non géré. L'intégration s'arrête et ne se reconnecte jamais
+  d'elle-même (chaque connexion pourrait envoyer un code) ; cliquez sur
+  **Tester la connexion** après avoir désactivé la connexion en deux étapes.
+- **Fluidra demande de ralentir** (429) : une pause d'au moins 1 minute
+  (Retry-After s'il est donné, 6 h au plus), pour toutes les lectures et les
+  commandes, gardée aux redémarrages.
+- **HTTP 403 sur le compte** malgré un jeton neuf : une pause de 30 minutes.
+- **Un équipement en erreur** (403, 404, 5xx, délai dépassé) : seul son badge
+  passe à « injoignable », les autres sont lus.
+- **Fluidra injoignable** : nouvel essai après 1, 2, 5, 10 puis toutes les
+  15 minutes, jamais plus vite que l'intervalle de rafraîchissement.
+
+## Limites
+
+- Jamais testée avec un vrai compte : les registres viennent de l'intégration
+  Home Assistant, vérifiés par ses utilisateurs sur leurs appareils.
+- Non pris en charge pour l'instant : pompes génériques, pompes à chaleur
+  PX50, Pro Elyo, Z950iQ et autres familles sans registres connus, robots,
+  vannes, prises, doseurs, coffrets Command Connect, programmations.
+- Le compte doit être dans la région Europe (EMEA) de Fluidra.
+
+## Crédits
+
+- [Fluidra-pool](https://github.com/foXaCe/Fluidra-pool) de foXaCe (MIT) :
+  l'API du cloud, la connexion, les familles d'équipements et leurs registres
+  sont portés en JavaScript.
+- Voir `THIRD_PARTY_NOTICES.md`.
+
+Fluidra, AstralPool et Zodiac sont des marques de leurs propriétaires ; ce
+projet est sans lien avec Fluidra.

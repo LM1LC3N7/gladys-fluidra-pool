@@ -12,44 +12,36 @@ the notes of the version's GitHub Release.
 
 ### Added
 
-- A working example of scene triggers, scene actions and dashboard widgets
-  (Gladys 5.1.0 or later).
-- `CHANGELOG.md`, rolled by the Release workflow.
-- A GitHub Release for every version, with its changelog section as notes: the
-  Gladys Supervision page links each version to the repository's releases.
-- CI runs the tests on Node 22 and 24, and builds the Docker image.
-- Dependabot keeps the npm dependencies and the GitHub Actions up to date.
-- `SECURITY.md` (how to report a vulnerability) and `CLAUDE.md` (project rules
-  for contributors and coding assistants).
-- Manifest tests: `version` matches `package.json`, `docker_image` is tagged
-  with it, descriptions hold 10 to 100 characters, placeholders are
-  multi-language objects.
-- The latitude and longitude fields show an example value as placeholder.
+- Fluidra Pool equipment through the Fluidra cloud (unofficial API, ported
+  from foXaCe/Fluidra-pool): every pool of the account, its device tree,
+  bridges replaced by the devices behind them.
+- Sign-in with the e-mail and the password through AWS Cognito, as the app;
+  the token is renewed from the refresh token by a timer, without a new
+  sign-in at each read; the tokens are kept in `/data` (0600) so a restart
+  does not sign in again.
+- Profiles checked by the users of the Home Assistant integration only: an
+  unknown equipment is counted in the status, never read.
+- Chlorinators and water analysers (tecnoLC2, domoticS2, eXO iQ, tecno2, Blue
+  Connect): water temperature, pH, ORP, salinity, free chlorine,
+  chlorination setpoint and real production; a probe that reads nothing adds
+  no feature.
+- E30iQ pump: running, automatic mode, speed (a select); Victoria Smart
+  Connect: running, speed (%), power (W).
+- Heat pumps (Z250iQ, Z260iQ, Z350iQ, Z550iQ, Z650iQ, LG Eco Elyo, Gre
+  HPGIC): running, water and air temperatures, setpoint, mode.
+- LumiPlus light: on/off.
+- Pump speed, light and heat pump setpoint from Gladys, off by default
+  (`allow_commands`); the setpoint is capped at 35 °C; no chemical dosing
+  command. Each command reads the device again just before acting, checks the
+  option again right before sending, runs one at a time per device, is
+  refused when it cannot be sent within 3.5 s, and is answered "sent, without
+  confirmation" when Fluidra does not answer.
+- Read every 60 s (60 to 900); refused credentials stop the integration with
+  a new try after 1 h, 6 h, then every 24 h; a verification code asked stops
+  it until the user acts; a 429 pauses every path for 60 s to 6 h, kept across
+  restarts; one unreadable device only gets a degraded badge.
+- "Test the connection" button; the status and the Discovery list are sent
+  again at each reconnection to Gladys.
+- Feature names and texts in French or English.
 
-### Changed
-
-- Node.js 22 or later is required (Node 20 is end-of-life).
-- Integration SDK 0.15.0. The tests now run against the fake Gladys of the
-  SDK, which refuses the payloads Gladys refuses.
-- The refresh interval is one minute minimum, the fastest Gladys polls a
-  device. The plug's power is only sent when it changes, and every 30
-  minutes otherwise.
-
-### Fixed
-
-- Gladys refused the devices of the Discovery tab: the weather station and
-  the plug declared their poll frequency in seconds instead of one of the
-  values Gladys accepts, and were never polled. They now poll every minute,
-  and the readings follow the refresh interval of the configuration.
-
-- The release commit no longer fails `npm run format:check`: the Release
-  workflow updates the manifest `version` and `docker_image` in place instead
-  of re-printing the whole file with `jq`.
-- The integration can write to `/data`: the image creates the directory owned
-  by the `node` user, a new Docker volume was owned by root.
-- A sub-container running the integration's own image follows it to the new
-  tag at each release, as well as in the manifest of the build summary: it kept
-  the previous tag, which may not exist on the registry. Sub-containers on a
-  third-party image (a broker, a database...) keep theirs.
-
-[Unreleased]: https://github.com/GladysAssistant/integration-template-js/commits/main
+[Unreleased]: https://github.com/LM1LC3N7/gladys-fluidra-pool/commits/main
