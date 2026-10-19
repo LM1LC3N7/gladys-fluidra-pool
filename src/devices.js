@@ -171,7 +171,11 @@ const speedOptions = (language) =>
     sort_order: i,
   }));
 
-/** The Gladys device of one Fluidra device. `created`: the roles of the device already in Gladys. */
+/**
+ * The Gladys device of one Fluidra device. `created`: the roles of the device
+ * already in Gladys; `device.canWrite`: its setpoint, speed or light take
+ * commands (src/fluidra.js writable()).
+ */
 export function buildDevice(gladys, device, language, created) {
   const ids = deviceIds(gladys, device.id);
   const range =
@@ -188,6 +192,9 @@ export function buildDevice(gladys, device, language, created) {
       has_feedback: false,
       keep_history: true,
       ...SHAPES[role](range),
+      // A device recognized by a weak signal keeps its writable roles, read
+      // only (read_only is not part of the core's structure signature).
+      ...(COMMAND_ROLES.includes(role) ? { read_only: !device.canWrite } : {}),
       ...(role === 'speed' ? { supported_options: speedOptions(language) } : {}),
     })),
     params: [

@@ -49,7 +49,9 @@ identifié par son numéro de série, son identifiant de famille Fluidra
 (`thingType`) ou la signature que donne la pompe à chaleur, jamais par son
 seul nom, son modèle ou sa famille, et jamais quand ce que dit Fluidra le
 contredit (par exemple un identifiant de famille d'un autre modèle). Un tel
-appareil est affiché, en lecture seule.
+appareil est affiché avec toutes ses fonctionnalités, mais la consigne, la
+vitesse et l'éclairage y sont en lecture seule (aucune commande ne lui est
+envoyée).
 
 Le badge de chaque appareil affiche « cloud », ou « injoignable » (avec un
 point orange) quand cet appareil n'a pas pu être lu, ou quand Fluidra le dit
@@ -122,7 +124,9 @@ circulation vers l'électrolyseur et la pompe à chaleur.
   **absent des sauvegardes de Gladys**, supprimé à la désinstallation.
   **Le jeton de rafraîchissement donne accès au compte** tant qu'il est
   valable : protégez cet hôte. L'e-mail et le mot de passe n'y sont jamais
-  écrits ; changer d'e-mail efface les jetons.
+  écrits ; changer d'e-mail, ou vider l'e-mail ou le mot de passe de la
+  configuration, efface les jetons (un arrêt « code de vérification » reste,
+  lui, attaché au compte).
 - Rien n'apparaît dans les journaux : ni mot de passe, ni jeton, ni e-mail, ni
   numéro de série complet (seulement ses 4 derniers caractères).
 - Tout passe en HTTPS vers `cognito-idp.eu-west-1.amazonaws.com` (la

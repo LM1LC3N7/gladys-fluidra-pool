@@ -82,6 +82,10 @@ up to date at the end of every milestone.
 - The `thingType` of each heat pump family (AMT = `amt`, Z650iQ = `nhpp`,
   Z350iQ = `hpc`, Z550iQ = `zs500`) and of the pumps and lights (`eppvs`,
   `mppvs`, `LWM`): a unit whose `thingType` differs is not identified.
+  **HPGIC in particular**: foXaCe gives no `thingType` for the Gre HPGIC; it
+  is assumed to share the AMT one (`amt`) or to have none. If a real HPGIC
+  reports another `thingType`, it is no longer read at all (no profile):
+  check it on a real unit and add its value to the profile's `thingTypes`.
 - The setpoint ranges (the families' ones, capped at 35 °C) and steps.
 - Rate limits: foXaCe met 429s polling every 30 s component by component;
   here one bulk call per device every 60 s.
@@ -142,8 +146,13 @@ up to date at the end of every milestone.
 - **Token margin**: 5 minutes, or a tenth of the token lifetime when that is
   shorter (Cognito may give short tokens).
 - **A verification code stop stays with the account hash**: a configuration
-  without credentials leaves `/data` as it is, and new credentials for the
-  same account do not lift it; only the test button tries again.
+  without credentials erases the tokens from `/data` but keeps the account
+  hash, the stop and the pause; new credentials for the same account do not
+  lift it; only the test button tries again.
+- **Weakly identified devices**: all their roles are published, the
+  setpoint, speed and light with `read_only: true` (`!canWrite`; not part of
+  the core's structure signature, so no feature is lost); `canWrite` is
+  checked when the command arrives and again after its wait in the queue.
 - **Follow-up reads**: a new command replaces those of the previous one.
 - **A device keeps the profile found first in a session** (features and
   their meaning must not change between two reads); a restart identifies

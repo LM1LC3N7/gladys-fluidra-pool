@@ -180,9 +180,14 @@ export class FluidraApp {
     this.reset();
     this.memory = normalizeMemory(await this.store.load().catch(() => null), this.now());
     if (!this.config.username || !this.config.password) {
-      // Nothing is read without credentials, and /data is left as it is: the
-      // stop of the account (a code asked) is still there when they come back.
+      // Nothing is read without credentials. The tokens of the account are
+      // erased from /data (emptying the credentials signs out), but its stop
+      // (a code asked), its pause and its account hash stay for when they come back.
       this.client.configure({ username: this.config.username, password: '', tokens: null });
+      if (this.memory.tokens) {
+        this.memory.tokens = null;
+        await this.saveMemory();
+      }
       this.publisher.start();
       await this.setStatus(false, T.noCredentials);
       return;
@@ -787,6 +792,7 @@ export class FluidraApp {
       profile: device.profile,
       values: device.values,
       seen: device.seen,
+      canWrite: device.canWrite === true,
     };
   }
 
@@ -1139,6 +1145,11 @@ export class FluidraApp {
     const device = this.devices.get(id);
     if (!device) {
       throw this.refusal(T.denied.unknownDevice);
+    }
+    if (!device.canWrite) {
+      // Checked again after the wait in the queue: a read meanwhile may have
+      // found a contradicting thingType or family.
+      throw this.refusal(T.denied.notWritable);
     }
     if (device.entry.online === false && !device.live) {
       // The last device tree says it is not connected (and nothing read says otherwise).

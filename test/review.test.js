@@ -157,6 +157,12 @@ test('B1 a name, a model or a family alone shows the values but never unlocks a 
   server.components[id] = { 15: 280, 16: 0, 21: 1, 37: 251, 40: 194 };
   const { gladys } = await setup(t, { server, config: ALLOW });
   assert.equal(profileParam(gladys, id), 'z550iq', 'identified by its name: read');
+  const featureOf = (deviceId, role) =>
+    deviceOf(gladys, deviceId).features.find((f) => f.external_id === `${dev(deviceId)}:${role}`);
+  assert.equal(featureOf(id, 'setpoint').read_only, true, 'R1: kept, read only');
+  assert.equal(featureOf(IDS.heatPump, 'setpoint').read_only, false);
+  assert.equal(featureOf(IDS.pump, 'speed').read_only, false);
+  assert.equal(featureOf(IDS.light, 'light').read_only, false);
   const ack = await command(gladys, id, 'setpoint', 30);
   assert.equal(ack.success, false);
   assert.match(ack.error, /reconnu que par son nom ou sa famille/);
@@ -376,6 +382,40 @@ test('M12 a code-asked stop stays with the account: emptied, then saved again, n
 });
 
 // --- M5: follow-up reads --------------------------------------------------------
+
+test('R4 emptied credentials erase the tokens from /data, keep the account and its stop', async (t) => {
+  const store = memoryStore();
+  const { app } = await setup(t, { store });
+  assert.ok(store.data.tokens?.refreshToken);
+  const account = store.data.account;
+  store.data.block = { kind: 'two_factor', retries: 0 };
+  await app.configUpdated({ username: USERNAME, password: '' });
+  assert.equal(store.data.tokens, null, 'signed out');
+  assert.equal(store.data.account, account);
+  assert.equal(store.data.block.kind, 'two_factor', 'the stop stays');
+});
+
+test('R2 a command waiting in the queue is refused when the device lost its strong identification', async (t) => {
+  const { gladys, server, app } = await setup(t, { config: ALLOW });
+  const gate = {};
+  gate.done = new Promise((resolve) => (gate.release = resolve));
+  server.queue.push({ match: to.bulk(IDS.light), before: () => gate.done });
+  const first = command(gladys, IDS.light, 'light', 1);
+  await settle();
+  const second = command(gladys, IDS.light, 'light', 0);
+  await settle();
+  // A read meanwhile found a contradiction: the queued command must not go.
+  app.devices.get(IDS.light).canWrite = false;
+  gate.release();
+  assert.equal((await first).success, true);
+  const ack = await second;
+  assert.equal(ack.success, false);
+  assert.match(ack.error, /reconnu que par son nom ou sa famille/);
+  assert.deepEqual(
+    server.writes().map((w) => w.desiredValue),
+    ['1'],
+  );
+});
 
 test('H13 a new command replaces the follow-up reads of the previous one', async (t) => {
   const { gladys, server, app } = await setup(t, { config: ALLOW });

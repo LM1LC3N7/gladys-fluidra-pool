@@ -43,7 +43,8 @@ and the setpoint can be sent only to a device identified by its serial
 number, its Fluidra family id (`thingType`) or the signature the heat pump
 reports, never by its name, its model or its family alone, and never when
 what Fluidra says contradicts it (for example a family id of another model).
-Such a device is shown, read only.
+Such a device is shown with all its features, but its setpoint, speed and
+light are read only (no command is sent to it).
 
 The badge of each device shows "cloud", or "unreachable" (with an orange dot)
 when that device could not be read, or when Fluidra says it is disconnected
@@ -111,8 +112,9 @@ chlorinator and the heat pump.
   `<Gladys base folder>/external-integrations/<selector>`, **not in the Gladys
   backups**, deleted when the integration is uninstalled. **The refresh token
   gives access to the account** while it is valid: protect that host. The
-  e-mail and the password are never written there; another e-mail drops the
-  tokens.
+  e-mail and the password are never written there; another e-mail, or an
+  e-mail or password emptied in the configuration, erases the tokens (a
+  "verification code" stop stays with the account).
 - Nothing reaches the logs: no password, token, e-mail nor whole serial
   number (its last 4 characters only).
 - Everything goes over HTTPS to `cognito-idp.eu-west-1.amazonaws.com` (the
