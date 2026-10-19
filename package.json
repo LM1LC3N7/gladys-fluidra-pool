@@ -1,6 +1,6 @@
 {
   "name": "gladys-fluidra-pool",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Gladys Assistant external integration for Fluidra Pool equipment (AstralPool, Zodiac) through the Fluidra cloud (unofficial API). Not affiliated with Fluidra.",
   "type": "module",

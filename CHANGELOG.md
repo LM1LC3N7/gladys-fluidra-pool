@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-19
+
 ### Added
 
 - Fluidra Pool equipment through the Fluidra cloud (unofficial API, ported
@@ -54,4 +56,5 @@ the notes of the version's GitHub Release.
 - Free chlorine and real production of tecnoLC2 chlorinators only on the
   units known to have them; a Victoria pump priming counts as running.
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-fluidra-pool/commits/main
+[Unreleased]: https://github.com/LM1LC3N7/gladys-fluidra-pool/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-fluidra-pool/releases/tag/v0.1.1
