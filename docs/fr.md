@@ -20,19 +20,36 @@ l'intégration Home Assistant. **Un équipement non reconnu est compté dans
 l'état de l'intégration mais jamais lu** : aucune valeur n'est affichée sous un
 faux nom.
 
-| Équipement                                                                             | Fonctionnalités                                                                                                                  |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Électrolyseurs tecnoLC2 (Energy Connect, Clear Connect, Ei2 iQ, GenSalt OE iQ, iSalt…) | Température de l'eau, pH, redox (ORP), salinité (g/L), chlore libre (mg/L) si la sonde existe, consigne et production réelle (%) |
-| Électrolyseurs domoticS2 (Elite Connect, Neolysis…), eXO iQ, eXPERT (tecno2)           | Selon la famille : température, pH, redox, salinité, chlore libre, consigne et production (%)                                    |
-| Analyseurs Blue Connect (Silver, Gold)                                                 | Température, pH, redox ; salinité sur le Gold                                                                                    |
-| Pompe de filtration E30iQ (et Inari VS, Verdon VS)                                     | En marche, mode automatique (programmation), **vitesse** (arrêt, lente, moyenne, rapide, automatique)                            |
-| Pompe Victoria Smart Connect VS                                                        | En marche, vitesse (%), puissance (W)                                                                                            |
-| Pompes à chaleur Z250iQ, Z260iQ, Z350iQ, Z550iQ(+), Z650iQ, Eco Elyo (LG), Gre HPGIC   | En marche, température de l'eau, température de l'air (selon le modèle), **consigne**, mode (texte)                              |
-| Éclairage LumiPlus Connect                                                             | **Éclairage** (allumé/éteint)                                                                                                    |
+| Équipement                                                                             | Fonctionnalités                                                                                                                              |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Électrolyseurs tecnoLC2 (Energy Connect, Clear Connect, Ei2 iQ, GenSalt OE iQ, iSalt…) | Température de l'eau, pH, redox (ORP), salinité (g/L), consigne de production (%) ; chlore libre et production réelle sur quelques appareils |
+| Électrolyseurs domoticS2 (Elite Connect, Neolysis…), eXO iQ, eXPERT (tecno2)           | Selon la famille : température, pH, redox, salinité, consigne et production (%)                                                              |
+| Analyseurs Blue Connect (Silver, Gold)                                                 | Température, pH, redox ; salinité sur le Gold                                                                                                |
+| Pompe de filtration E30iQ (et Inari VS, Verdon VS)                                     | En marche, mode automatique (programmation), **vitesse** (arrêt, lente, moyenne, rapide, automatique)                                        |
+| Pompe Victoria Smart Connect VS                                                        | En marche, vitesse (%), puissance (W)                                                                                                        |
+| Pompes à chaleur Z250iQ, Z260iQ, Z350iQ, Z550iQ(+), Z650iQ, Eco Elyo (LG), Gre HPGIC   | En marche, température de l'eau, température de l'air (selon le modèle), **consigne**, mode (texte)                                          |
+| Éclairage LumiPlus Connect                                                             | **Éclairage** (allumé/éteint)                                                                                                                |
 
 Une sonde absente (pas de redox, pas de chlore libre) ne crée pas de
 fonctionnalité : elle n'apparaît que lorsqu'une vraie valeur a été lue. Un pH,
-un redox ou une salinité à 0 est traité comme « pas de mesure ».
+un redox ou une salinité à 0 est traité comme « pas de mesure ». Le chlore
+libre (mg/L) et la production réelle (%) d'un tecnoLC2 ne sont lus que sur les
+appareils dont les propriétaires ont montré ces registres à l'intégration
+Home Assistant (Ducere 21 LC24008202, Clear Connect CC24018202, CC24042517,
+CC24058902 ; production sur les Energy Connect pontés CC24054221 et
+CC24041107) : sur les autres, ces registres peuvent ne rien contenir, ils ne
+sont donc pas affichés. Sur un domoticS2, la consigne affichée est celle
+demandée (le registre qu'écrit l'application) ; ses registres de relecture et
+de production changent d'un appareil à l'autre, ils ne sont donc pas
+affichés.
+
+**Commandes seulement pour un appareil bien identifié.** La vitesse de la
+pompe, l'éclairage et la consigne ne peuvent être envoyés qu'à un appareil
+identifié par son numéro de série, son identifiant de famille Fluidra
+(`thingType`) ou la signature que donne la pompe à chaleur, jamais par son
+seul nom, son modèle ou sa famille, et jamais quand ce que dit Fluidra le
+contredit (par exemple un identifiant de famille d'un autre modèle). Un tel
+appareil est affiché, en lecture seule.
 
 Le badge de chaque appareil affiche « cloud », ou « injoignable » (avec un
 point orange) quand cet appareil n'a pas pu être lu, ou quand Fluidra le dit
@@ -74,7 +91,17 @@ passent une à la fois. Une commande qui ne peut pas être envoyée dans les
 **3,5 secondes** suivant son arrivée est refusée (Gladys affiche un échec au
 bout de 5 secondes). Si Fluidra ne répond pas à temps, Gladys affiche
 « Commande envoyée, sans confirmation de Fluidra » : vérifiez l'état de
-l'appareil, il est relu dans les secondes qui suivent.
+l'appareil, il est relu dans les secondes qui suivent. Une commande est
+refusée, sans rien envoyer, quand la dernière liste des équipements dit
+l'appareil non connecté.
+
+Un succès veut seulement dire que le cloud Fluidra a accepté la demande, pas
+que l'appareil l'a appliquée : les lectures qui suivent la commande (5, 20 et
+60 secondes) montrent son état réel. En particulier, un compte avec lequel la
+piscine est **partagée** (un invité du compte du propriétaire) peut n'avoir
+que la lecture côté Fluidra : Fluidra peut répondre « succès » à une commande
+sans que rien ne change. Utilisez le compte du propriétaire pour les
+commandes.
 
 Activées, ces commandes peuvent être lancées par une scène ou un tableau de
 bord en votre absence : arrêter la filtration, par exemple, arrête aussi la
@@ -87,7 +114,8 @@ circulation vers l'électrolyseur et la pompe à chaleur.
   HTTPS), comme le fait l'application.
 - La connexion donne des jetons : le jeton d'accès (environ une heure) est
   renouvelé avec le jeton de rafraîchissement, sans le mot de passe, 5 minutes
-  avant sa fin. Les jetons sont gardés dans le volume `/data` de l'intégration
+  avant sa fin (un dixième de sa durée de vie quand c'est plus court). Les
+  jetons sont gardés dans le volume `/data` de l'intégration
   (fichier lisible par l'utilisateur du conteneur seulement) pour qu'un
   redémarrage ne se reconnecte pas. Sur l'hôte de Gladys, ce volume est le
   dossier `<dossier de base de Gladys>/external-integrations/<sélecteur>`,
@@ -107,25 +135,40 @@ circulation vers l'électrolyseur et la pompe à chaleur.
 Le compte est lu toutes les 60 secondes par défaut (60 à 900) : la liste des
 piscines, les équipements de chaque piscine, puis les registres de chaque
 équipement reconnu (une requête par équipement). Trois lectures suivent une
-commande (après 5, 20 et 60 secondes).
+commande (après 5, 20 et 60 secondes) ; une nouvelle commande remplace les
+lectures encore prévues pour la précédente.
 
 ## Erreurs
 
 - **Mot de passe refusé** (ou compte non confirmé) : l'intégration s'arrête ;
   un nouvel essai après 1 h, 6 h, puis toutes les 24 h, ou aussitôt quand vous
-  enregistrez la configuration ou cliquez sur **Tester la connexion**.
+  enregistrez un e-mail ou un mot de passe **modifié**, ou cliquez sur
+  **Tester la connexion** (réenregistrer les mêmes e-mail et mot de passe ne
+  réessaie pas).
 - **Code de vérification, ou toute autre étape de connexion** (sauf un nouveau
   mot de passe) : non géré. L'intégration s'arrête et ne se reconnecte jamais
   d'elle-même (chaque connexion pourrait envoyer un code) ; cliquez sur
   **Tester la connexion** après avoir désactivé la connexion en deux étapes.
+  Pour un code de vérification, l'arrêt reste attaché au compte : vider la
+  configuration, ou saisir le même e-mail avec un autre mot de passe, ne le
+  lève pas ; seul le bouton le fait.
 - **Fluidra demande de ralentir** (429) : une pause d'au moins 1 minute
   (Retry-After s'il est donné, 6 h au plus), pour toutes les lectures et les
   commandes, gardée aux redémarrages.
-- **HTTP 403 sur le compte** malgré un jeton neuf : une pause de 30 minutes.
+- **HTTP 403 sur le compte** malgré un jeton neuf : une pause de 30 minutes
+  (un seul renouvellement du jeton par essai, jamais de boucle). Après 3 refus
+  de suite, l'état indique un **filtrage possible de ce client par Fluidra** :
+  l'intégration dit qui elle est (« gladys-fluidra-pool ») et n'imite jamais
+  l'application ni ne contourne un blocage. Vérifiez que le compte fonctionne
+  dans l'application ; si oui, signalez-le (l'API Fluidra est non officielle et
+  peut refuser d'autres clients).
 - **Un équipement en erreur** (403, 404, 5xx, délai dépassé) : seul son badge
   passe à « injoignable », les autres sont lus.
-- **Fluidra injoignable** : nouvel essai après 1, 2, 5, 10 puis toutes les
-  15 minutes, jamais plus vite que l'intervalle de rafraîchissement.
+- **Fluidra injoignable** (erreur réseau, 5xx) : nouvel essai après 1, 2, 5,
+  10 puis toutes les 15 minutes, jamais plus vite que l'intervalle de
+  rafraîchissement. Cette attente est gardée au redémarrage (15 minutes au
+  plus) ; elle ne retient que les lectures, et le bouton **Tester la
+  connexion** essaie aussitôt.
 
 ## Limites
 

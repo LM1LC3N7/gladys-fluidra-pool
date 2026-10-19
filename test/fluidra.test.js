@@ -130,8 +130,8 @@ test('decode: each layout, checked values only', () => {
   const tecno = identify(device({ thingType: 'tecnoLC2' }));
   assert.deepEqual(
     decode(tecno, comps({ 10: 80, 154: 0, 165: 0, 170: '702', 172: 254, 174: 0, 178: 150 })),
-    { waterTemperature: 25.4, orp: 702, freeChlorine: 1.5, level: 80, production: 0 },
-    'pH and salinity at 0: no probe reading',
+    { waterTemperature: 25.4, orp: 702, level: 80 },
+    'pH and salinity at 0: no probe reading; c178/c154 not on the standard layout',
   );
   const exo = identify(device({ thingType: 'exr' }));
   assert.deepEqual(decode(exo, comps({ 38: 55, 62: 72, 63: 738, 64: 14 })), {
@@ -154,7 +154,8 @@ test('decode: each layout, checked values only', () => {
     speedPercent: 65,
     power: 512,
   });
-  assert.deepEqual(decode(victoria, comps({ 14: 'PRIMING', 21: 'x' })), {});
+  assert.deepEqual(decode(victoria, comps({ 14: 'PRIMING', 21: 'x' })), { running: 1 });
+  assert.deepEqual(decode(victoria, comps({ 14: 'CALIBRATION' })), {});
   const pump = identify(device({ thingType: 'eppvs' }));
   assert.equal(pumpSpeedOf(decode(pump, comps({ 9: 1, 10: 0, 11: 2 }))), 'high');
   assert.equal(pumpSpeedOf(decode(pump, comps({ 9: 0, 10: 1, 11: 2 }))), 'off');

@@ -139,7 +139,6 @@ test('start: one sign-in, pools, the tree, one bulk read per supported device', 
     'orp',
     'salinity',
     'level',
-    'production',
   ]);
   assert.deepEqual(roles(gladys, IDS.pump), ['running', 'auto-mode', 'speed']);
   assert.deepEqual(roles(gladys, IDS.heatPump), [
@@ -156,7 +155,6 @@ test('start: one sign-in, pools, the tree, one bulk read per supported device', 
   assert.equal(last(gladys, IDS.chlorinator, 'water-temperature'), 26);
   assert.equal(last(gladys, IDS.chlorinator, 'salinity'), 6.27);
   assert.equal(last(gladys, IDS.chlorinator, 'level'), 80);
-  assert.equal(last(gladys, IDS.chlorinator, 'production'), 100);
   assert.equal(last(gladys, IDS.pump, 'running'), 1);
   assert.equal(last(gladys, IDS.pump, 'auto-mode'), 0);
   assert.equal(last(gladys, IDS.pump, 'speed'), 'medium');
@@ -199,12 +197,7 @@ test('a probe that reads 0 or nothing gives no feature; a created feature is nev
   server.set(IDS.chlorinator, 170, 0);
   server.set(IDS.chlorinator, 174, null);
   const { gladys, app } = await setup(t, { server, create: false });
-  assert.deepEqual(roles(gladys, IDS.chlorinator), [
-    'water-temperature',
-    'ph',
-    'level',
-    'production',
-  ]);
+  assert.deepEqual(roles(gladys, IDS.chlorinator), ['water-temperature', 'ph', 'level']);
   // The device was created earlier with an ORP feature: it keeps it.
   const created = structuredClone(deviceOf(gladys, IDS.chlorinator));
   created.features.push({ ...created.features[1], external_id: `${dev(IDS.chlorinator)}:orp` });
@@ -521,7 +514,7 @@ test('a pump start whose speed cannot follow says the pump was started', async (
   assert.equal(ack.success, false);
   assert.match(
     ack.error,
-    /La pompe a été démarrée ; sa vitesse : Commande envoyée, sans confirmation/,
+    /Fluidra a accepté le démarrage de la pompe ; sa vitesse : Commande envoyée, sans confirmation/,
   );
   assert.equal(server.components[IDS.pump][9], 1);
 });

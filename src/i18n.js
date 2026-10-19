@@ -123,8 +123,8 @@ export const T = {
         ),
   refused: (wait) =>
     both(
-      `Fluidra refused the e-mail or the password (or the account). Check them in the configuration: saving, or the test button, tries again at once; otherwise one new try in ${wait.en}.`,
-      `Fluidra a refusé l'e-mail ou le mot de passe (ou le compte). Vérifiez-les dans la configuration : enregistrer, ou le bouton de test, réessaie aussitôt ; sinon un nouvel essai dans ${wait.fr}.`,
+      `Fluidra refused the e-mail or the password (or the account). Check them in the configuration: saving a changed e-mail or password, or the test button, tries again at once; otherwise one new try in ${wait.en}.`,
+      `Fluidra a refusé l'e-mail ou le mot de passe (ou le compte). Vérifiez-les dans la configuration : enregistrer un e-mail ou un mot de passe modifié, ou le bouton de test, réessaie aussitôt ; sinon un nouvel essai dans ${wait.fr}.`,
     ),
   twoFactor: both(
     'Fluidra asks for a verification code (two-step sign-in), which this integration does not handle. It never signs in again by itself (each sign-in would send a code): turn the two-step sign-in off in the Fluidra Pool app, then click "Test the connection".',
@@ -158,6 +158,18 @@ export const T = {
     both(
       `Fluidra refuses the requests (HTTP 403): pausing for ${wait.en}.`,
       `Fluidra refuse les requêtes (HTTP 403) : pause de ${wait.fr}.`,
+    ),
+  /** 403s in a row on the account, each with a fresh token. */
+  filtered: (wait, count) =>
+    both(
+      `Fluidra refused the account ${count} times in a row (HTTP 403) despite a fresh session: Fluidra may be filtering this client (see the documentation, "Errors"). The integration does not pretend to be the app. Pausing for ${wait.en}.`,
+      `Fluidra a refusé le compte ${count} fois de suite (HTTP 403) malgré une session neuve : filtrage possible de ce client par Fluidra (voir la documentation, « Erreurs »). L'intégration ne se fait pas passer pour l'application. Pause de ${wait.fr}.`,
+    ),
+  /** A backoff (Fluidra unreachable) kept across a restart. */
+  backoffKept: (wait) =>
+    both(
+      `Fluidra could not be reached at the last tries. Next try in ${wait.en}.`,
+      `Fluidra était injoignable aux derniers essais. Nouvel essai dans ${wait.fr}.`,
     ),
   deviceNoAnswer: both(
     'Fluidra did not answer for this device at the last read (an error or a timeout of the cloud).',
@@ -210,6 +222,14 @@ export const T = {
       'This device is not (or no longer) in the Fluidra account, or not supported.',
       "Cet appareil n'est pas (ou plus) dans le compte Fluidra, ou n'est pas pris en charge.",
     ),
+    notWritable: both(
+      'This device was recognized by its name or its family only (or what Fluidra says of it does not match its model): its values are shown, but no command is sent to it.',
+      "Cet appareil n'a été reconnu que par son nom ou sa famille (ou ce que Fluidra en dit ne correspond pas à son modèle) : ses valeurs sont affichées, mais aucune commande ne lui est envoyée.",
+    ),
+    disconnected: both(
+      'Fluidra says this device is not connected: command refused (nothing was sent).',
+      "Fluidra indique que cet appareil n'est pas connecté : commande refusée (rien n'a été envoyé).",
+    ),
     badSpeed: both(
       'Unexpected speed: off, low, medium or high.',
       'Vitesse inattendue : arrêt, lente, moyenne ou rapide.',
@@ -244,12 +264,24 @@ export const T = {
       "Fluidra a répondu trop tard : commande refusée avant d'agir (rien n'a été envoyé).",
     ),
   },
-  /** The pump was started, but its speed was not sent (deadline, session, option). */
+  /**
+   * Fluidra accepted the start (an answer of the cloud, not a confirmation
+   * from the pump), but the speed was not sent (deadline, session, option).
+   */
   speedNotSent: both(
-    'The pump was started, but its speed was not sent: choose it again.',
-    "La pompe a été démarrée, mais sa vitesse n'a pas été envoyée : choisissez-la à nouveau.",
+    'Fluidra accepted the start of the pump, but its speed was not sent: choose it again.',
+    "Fluidra a accepté le démarrage de la pompe, mais sa vitesse n'a pas été envoyée : choisissez-la à nouveau.",
   ),
-  speedStarted: both('The pump was started; its speed:', 'La pompe a été démarrée ; sa vitesse :'),
+  speedStarted: both(
+    'Fluidra accepted the start of the pump; its speed:',
+    'Fluidra a accepté le démarrage de la pompe ; sa vitesse :',
+  ),
+  /** The start got no answer: it may have reached Fluidra; the speed was not sent. */
+  startMaybeSent: (reason) =>
+    both(
+      `The start of the pump was sent, without a confirmation from Fluidra (${reason.en}); its speed was not sent. Check the pump, then choose the speed again.`,
+      `Démarrage de la pompe envoyé, sans confirmation de Fluidra (${reason.fr}) ; sa vitesse n'a pas été envoyée. Vérifiez la pompe, puis choisissez à nouveau la vitesse.`,
+    ),
   maybeSent: (reason) =>
     both(
       `The command was sent, without a confirmation from Fluidra (${reason.en}). Check the state of the device.`,

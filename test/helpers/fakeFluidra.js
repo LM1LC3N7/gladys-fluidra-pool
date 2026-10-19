@@ -38,6 +38,8 @@ export function fakeFluidra({ lifetime = HOUR, challenge, bulk = true } = {}) {
     /** Every token ever made, to check none reaches the logs. */
     secrets: [],
     down: false,
+    /** The `ts` every component reports (move it to show fresh data). */
+    ts: 1_787_767_038,
     /** One-shot answers: { match(request), status, body, headers, before(), throws } */
     queue: [],
     signIns() {
@@ -127,7 +129,7 @@ export function fakeFluidra({ lifetime = HOUR, challenge, bulk = true } = {}) {
     id: c,
     reportedValue: server.components[id][c],
     desiredValue: server.components[id][c],
-    ts: 1_787_767_038,
+    ts: server.ts,
   });
 
   function api(request) {

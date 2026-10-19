@@ -27,7 +27,8 @@ Gladys ⇄ SDK ⇄ src/handlers.js ⇄ src/app.js (FluidraApp) ⇄ src/client.js
 
 - **Sign-in** (as foXaCe/Fluidra-pool): AWS Cognito `USER_PASSWORD_AUTH` on
   the public app client of the Fluidra Pool app, over HTTPS. The bearer of the
-  API is the **access token**, renewed 5 minutes before it expires with
+  API is the **access token**, renewed 5 minutes (a tenth of a shorter
+  lifetime) before it expires with
   `REFRESH_TOKEN_AUTH` by a timer of its own; a refused refresh token is
   dropped and the password signs in once. Any challenge (a code, a new
   password, another step) stops the integration; a code challenge is never
@@ -43,14 +44,21 @@ Gladys ⇄ SDK ⇄ src/handlers.js ⇄ src/app.js (FluidraApp) ⇄ src/client.js
   once (again: `session_refused`, spaced new tries, or a 30-minute pause on a
   403). An error on one pool or one device marks only it. 429: a pause of
   Retry-After between 60 s and 6 h for every path; pauses and stops are kept
-  in `/data` and capped when read back. Network errors: 1, 2, 5, 10, 15 min,
-  never under the interval.
+  in `/data` and capped when read back. Network errors and 5xx: 1, 2, 5, 10,
+  15 min, never under the interval, kept in `/data` (15 min at most). Three
+  403s in a row on the account: the status says Fluidra may be filtering
+  this client.
 - **Profiles** (`src/fluidra.js`, from foXaCe `device_registry`): the
   serial, the Fluidra family id (`thingType`), the name, the family label and
   the component-7 signature pick a profile; the tecnoLC2 register signature
-  catches a chlorinator without a family id. No profile, no read: never a
-  value under a guessed meaning. Each value is range-checked; pH, ORP and
-  salinity at 0 mean "no reading".
+  catches a chlorinator without a family id. A profile the `thingType` or the
+  family label contradicts is never used (`contradicts()`), and the family
+  is read before the name. No profile, no read: never a value under a
+  guessed meaning. A command needs a strong signal of the profile (serial,
+  `thingType`, component-7 signature: `writable()`); a name, a model or a
+  family alone leaves the device read only. Each value is range-checked; pH,
+  ORP and salinity at 0 mean "no reading"; free chlorine and production only
+  on the serials foXaCe maps them on.
 - **Devices**: `ext:<selector>:fluidra:<cloud id>`. Features by role:
   `water-temperature`, `ph`, `orp`, `free-chlorine`, `salinity`, `level`,
   `production` (chlorinators, those seen with a value), `running`,
@@ -60,7 +68,8 @@ Gladys ⇄ SDK ⇄ src/handlers.js ⇄ src/app.js (FluidraApp) ⇄ src/client.js
   heat pumps, `light` (light/binary, writable). A republished device keeps
   the features it was created with.
 - **Commands** (`PUT /generic/devices/{id}/components/{c}` `{ desiredValue }`),
-  behind `allow_commands`: a fresh read of the device first (refused when it
+  behind `allow_commands`, refused for a device the last tree says
+  disconnected: a fresh read of the device first (refused when it
   fails or lacks the value; nothing sent when already in the asked state), the
   option checked again right before sending, one at a time per device, every
   request sent by 3.4 s after the arrival and answered by 4.6 s; a write

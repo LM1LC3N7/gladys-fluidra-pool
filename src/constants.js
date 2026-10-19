@@ -78,7 +78,7 @@ export const TIMINGS = {
   followUps: [5_000, 20_000, 60_000],
   /** The renewal timer tries again this long after a failed renewal. */
   renewRetry: MINUTE,
-  /** Renew the token this long before it expires. */
+  /** Renew the token this long before it expires (a tenth of its lifetime when shorter). */
   tokenMargin: 5 * MINUTE,
   /** Lifetime assumed when Cognito gives none (its default: 1 h). */
   tokenLifetime: HOUR,
@@ -92,6 +92,11 @@ export const TIMINGS = {
   rateLimitDefault: 5 * MINUTE,
   /** The account endpoint refused a fresh token with 403 (a WAF or CDN block): 30 minutes. */
   forbiddenPause: 30 * MINUTE,
+  /**
+   * After this many such 403s in a row, the status says Fluidra may be
+   * filtering this client (the integration never imitates the app).
+   */
+  forbiddenNotice: 3,
   /** The test button and the Discovery scan read the cloud at most every 30 s. */
   testCooldown: 30_000,
   /** States flushed to Gladys every second; unchanged ones again every 30 min. */

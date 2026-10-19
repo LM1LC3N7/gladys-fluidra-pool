@@ -3,8 +3,9 @@
 // container), never the e-mail nor the password:
 //   - the Cognito tokens (access and refresh) with the account they belong to
 //     (a hash of the e-mail): a restart does not sign in again;
-//   - the pauses (429, 403) and the stops (refused credentials and their next
-//     try, a code asked), bounded when read back.
+//   - the pauses (429, 403, the backoff after 5xx and network errors), the
+//     403s in a row, and the stops (refused credentials and their next try, a
+//     code asked), bounded when read back.
 // The file is readable by the container user only (0600).
 // -----------------------------------------------------------------------------
 
@@ -50,7 +51,16 @@ const time = (value) => (Number.isFinite(value) && value > 0 ? value : undefined
 const text = (value) =>
   typeof value === 'string' && value !== '' && value.length < 16384 ? value : undefined;
 
-const PAUSE_KINDS = ['rate', 'forbidden'];
+/**
+ * 'rate' (429) and 'forbidden' (403) hold every path; 'backoff' (Fluidra
+ * unreachable, 5xx) holds the reads only. Each is capped when read back.
+ */
+const PAUSE_CAPS = {
+  rate: TIMINGS.rateLimitMax,
+  forbidden: TIMINGS.forbiddenPause,
+  backoff: TIMINGS.backoff.at(-1),
+};
+const PAUSE_KINDS = Object.keys(PAUSE_CAPS);
 export const BLOCK_KINDS = [
   'refused',
   'two_factor',
@@ -72,19 +82,28 @@ export function normalizeMemory(raw, now = Date.now()) {
           accessToken: text(t.accessToken),
           refreshToken: text(t.refreshToken),
           expiresAt: time(t.expiresAt) ?? 0,
+          lifetime: time(t.lifetime) ? Math.min(t.lifetime, 24 * 3600 * 1000) : undefined,
         }
       : null;
+  const p = raw?.pause;
   const pause =
-    PAUSE_KINDS.includes(raw?.pause?.kind) && time(raw.pause.until)
+    PAUSE_KINDS.includes(p?.kind) && time(p.until)
       ? {
-          kind: raw.pause.kind,
-          source: raw.pause.source === 'cognito' ? 'cognito' : 'api',
-          until: Math.min(
-            raw.pause.until,
-            now + (raw.pause.kind === 'forbidden' ? TIMINGS.forbiddenPause : TIMINGS.rateLimitMax),
-          ),
+          kind: p.kind,
+          source: p.source === 'cognito' ? 'cognito' : 'api',
+          until: Math.min(p.until, now + PAUSE_CAPS[p.kind]),
+          // The backoff step reached (1, 2, 5, 10, 15 min): the next failure goes on from it.
+          ...(p.kind === 'backoff'
+            ? {
+                failures:
+                  Number.isInteger(p.failures) && p.failures >= 0 ? Math.min(p.failures, 10) : 1,
+              }
+            : {}),
         }
       : null;
+  // The 403s on the account in a row, a fresh token each time (the filtering notice).
+  const forbidden =
+    Number.isInteger(raw?.forbidden) && raw.forbidden > 0 ? Math.min(raw.forbidden, 100) : 0;
   const b = raw?.block;
   const block =
     account && BLOCK_KINDS.includes(b?.kind)
@@ -98,5 +117,5 @@ export function normalizeMemory(raw, now = Date.now()) {
             typeof b.detail === 'string' && /^[A-Z_]{1,40}$/.test(b.detail) ? b.detail : undefined,
         }
       : null;
-  return { account, tokens, pause, block };
+  return { account, tokens, pause, block, forbidden };
 }

@@ -119,11 +119,12 @@ export class CognitoClient {
     const seconds = Number(result.ExpiresIn);
     // ExpiresIn counts from now on our own clock (a host clock ahead or behind
     // does not matter); one hour when Cognito gives none.
-    const expiresAt =
+    const lifetime =
       Number.isFinite(seconds) && seconds > 0
-        ? this.now() + Math.min(seconds, 24 * 3600) * 1000
-        : this.now() + TIMINGS.tokenLifetime;
-    return { accessToken, refreshToken, expiresAt };
+        ? Math.min(seconds, 24 * 3600) * 1000
+        : TIMINGS.tokenLifetime;
+    // `lifetime`: the renewal margin is a tenth of it when that is under 5 minutes.
+    return { accessToken, refreshToken, expiresAt: this.now() + lifetime, lifetime };
   }
 
   /** A full sign-in with the password (USER_PASSWORD_AUTH, as the app); resolves the tokens. */

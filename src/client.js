@@ -101,10 +101,20 @@ export class FluidraClient {
     return Boolean(this.tokens?.accessToken) && this.tokens.expiresAt - ms > this.now();
   }
 
+  /**
+   * How long before its end the token is renewed: 5 minutes, or a tenth of
+   * its lifetime when that is shorter (a 5-minute token is not renewed
+   * before every request).
+   */
+  get margin() {
+    const lifetime = this.tokens?.lifetime ?? TIMINGS.tokenLifetime;
+    return Math.min(TIMINGS.tokenMargin, Math.max(1_000, Math.floor(lifetime / 10)));
+  }
+
   /** When the token should be renewed (its expiry minus the margin), or undefined. */
   get renewAt() {
     return this.tokens?.accessToken && this.tokens.refreshToken
-      ? this.tokens.expiresAt - TIMINGS.tokenMargin
+      ? this.tokens.expiresAt - this.margin
       : undefined;
   }
 
@@ -127,8 +137,8 @@ export class FluidraClient {
    * A valid token: the current one, else renewed from the refresh token,
    * else (once per cycle) a new sign-in. One renewal at a time.
    */
-  token({ force = false, signIn = true, validity = TIMINGS.tokenMargin, timeout } = {}) {
-    if (!force && this.tokenValidFor(validity)) {
+  token({ force = false, signIn = true, validity, timeout } = {}) {
+    if (!force && this.tokenValidFor(validity ?? this.margin)) {
       return Promise.resolve(this.tokens.accessToken);
     }
     if (!this.renewing) {
@@ -304,7 +314,11 @@ export class FluidraClient {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw new FluidraError('bad_response', 'Fluidra sent no component');
     }
-    return { reported: data.reportedValue, desired: data.desiredValue };
+    const value = { reported: data.reportedValue, desired: data.desiredValue };
+    if (Number.isFinite(data.ts) && data.ts > 0) {
+      value.ts = data.ts;
+    }
+    return value;
   }
 
   /** Writes a component (`PUT …/components/{id}` `{ desiredValue }`): never retried. */

@@ -26,6 +26,12 @@ up to date at the end of every milestone.
       stops and pauses persisted and capped; badges; test button; en/fr;
       docs; cover. Tested against a fake cloud only (Node 22 and 24). No
       Docker on this PC: the image build is left to the CI.
+- [x] **Milestone 1 fixes — review** (2026-10-19): commands only on a strong
+      identification nothing contradicts; no command to a disconnected
+      device; backoff kept in `/data`; the 403 filtering notice; token margin
+      a tenth of a short lifetime; per-serial free chlorine and production;
+      Victoria PRIMING; follow-up reads replaced; the code-asked stop kept
+      with the account (see "Decisions").
 - [ ] **Milestone 2 — real account**: run against a real account, compare
       with the Fluidra Pool app (see "To check"); turn the answers
       (anonymized) into fixtures.
@@ -53,16 +59,29 @@ up to date at the end of every milestone.
   the **access token**; whether an account with MFA answers `SMS_MFA` /
   `SOFTWARE_TOKEN_MFA` (a stop here).
 - **The User-Agent**: the reference sends the Android app's own User-Agent;
-  this integration sends `gladys-fluidra-pool/0.1`. If the API refuses it,
-  stop and decide (no impersonation was added).
+  this integration sends `gladys-fluidra-pool/0.1` and **never imitates the
+  app** (no workaround of any kind). If the API refuses it (403s in a row
+  with fresh tokens), the status says "Fluidra may be filtering this client"
+  after 3 of them, the 30-minute pause holds, and the decision goes to the
+  maintainer.
 - The answers: `users/me/pools` (a list or `{ pools }`), the tree (bridged
   children, `thingType` on children, `type` connected/disconnected), the bulk
-  components (shape, `details=true`), a 403 for a shared/viewer account.
+  components (shape, `details=true`, the `ts` of each component), whether a
+  shared/viewer account gets a 403 or a 200 without effect on a write (the
+  docs say commands may be accepted without effect on a shared account).
 - The writes: the answer of a `PUT`, how long a change takes to show
   (follow-up reads at 5, 20 and 60 s), the E30iQ start-then-speed sequence
-  (foXaCe waits 1 s between c9 and c11, this integration does not: the pump
-  runs at 100 % for about a minute after a manual start anyway, API-DISCOVERY
-  §10.4), the LumiPlus power as a string.
+  (foXaCe's speed select writes c9 then c11 without a pause, like this
+  integration; its 1 s delay is only in its `start_pump` and
+  `enable_auto_mode` helpers), the LumiPlus power as a string.
+- **domoticS2**: the generic profile reads the chlorination setpoint on c4
+  (the register the app writes). foXaCe reads it back on c164 on the
+  Neolysis DM24008702 and on c263 on the Cell Guard LS12 DM24086706, where
+  c164 is the real production: until a unit is checked, no production and no
+  read-back are shown for the family.
+- The `thingType` of each heat pump family (AMT = `amt`, Z650iQ = `nhpp`,
+  Z350iQ = `hpc`, Z550iQ = `zs500`) and of the pumps and lights (`eppvs`,
+  `mppvs`, `LWM`): a unit whose `thingType` differs is not identified.
 - The setpoint ranges (the families' ones, capped at 35 °C) and steps.
 - Rate limits: foXaCe met 429s polling every 30 s component by component;
   here one bulk call per device every 60 s.
@@ -97,6 +116,35 @@ up to date at the end of every milestone.
   CC24054221/CC24041107, have their own profile). An equipment without a
   profile is counted in the status and logged once (family and `thingType`
   only), never read.
+- **Contradictions and strong signals (review, milestone 1 fixes).** A
+  profile is never used when the `thingType` contradicts it (AMT layout:
+  `amt` or none; Z650iQ: `nhpp`; Z350iQ: `hpc`; Z550iQ: `zs500`; E30iQ:
+  `eppvs`; Victoria: `mppvs`; LumiPlus: `LWM`) or when the family label is of
+  another coarse type (a Chlorinators entry is never a heat pump); `classify`
+  reads the family first, the name only when the family says nothing. A
+  command (setpoint, speed, light) needs a strong signal of the profile
+  itself: its serial, its `thingType`, its component-7 signature (LG
+  BXWAA/BXWAB, HPGIC CXWAB with its LG serial, Z260iQ BXWAD), or for
+  LumiPlus `LWM` or a "lumiplus" name; a name, a model or a family alone
+  leaves the device read only. The LumiPlus family pattern ("light") was
+  dropped. Free chlorine (c178) and production (c154) only on the serials
+  foXaCe maps them on.
+- **No command to a device the last tree says disconnected** (a dedicated
+  refusal). A bridged child reported disconnected whose component `ts` moved
+  since the last read is taken as live (foXaCe sensor/chlorinator.py); a
+  missing or unchanged `ts` is not.
+- **The backoff** after 5xx and network errors is kept in `/data`
+  (`{ kind: 'backoff', until, failures }`), capped at 15 minutes when read
+  back; it holds the reads only (commands and the test button are not held).
+- **403s in a row on the account** (each with a fresh token) are counted in
+  `/data`; from 3, the status says Fluidra may be filtering this client. One
+  renewal per try, the 30-minute pause kept, never a refresh loop.
+- **Token margin**: 5 minutes, or a tenth of the token lifetime when that is
+  shorter (Cognito may give short tokens).
+- **A verification code stop stays with the account hash**: a configuration
+  without credentials leaves `/data` as it is, and new credentials for the
+  same account do not lift it; only the test button tries again.
+- **Follow-up reads**: a new command replaces those of the previous one.
 - **A device keeps the profile found first in a session** (features and
   their meaning must not change between two reads); a restart identifies
   again.

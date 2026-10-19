@@ -12,12 +12,15 @@
 // - the commands of one device run one at a time (a promise chain per device);
 // - a command not sent 3.5 s after it arrived is refused (Gladys shows a
 //   failure after 5 s: nothing must happen after that); one that may have
-//   reached Fluidra is answered "sent, without confirmation", never "not sent".
+//   reached Fluidra is answered "sent, without confirmation", never "not sent";
+// - a command goes only to a device identified by a strong signal (serial,
+//   thingType, component-7 signature) that nothing contradicts, and never to
+//   one the last device tree says disconnected.
 //
-// The pauses (429, 403) and the stops (refused credentials, a code asked) are
-// kept in /data and hold for every path. A pause of the Fluidra API does not
-// stop the token renewals (one of Cognito does). index.js only wires the SDK
-// handlers to this class.
+// The pauses (429, 403: every path; the 5xx/network backoff: the reads only)
+// and the stops (refused credentials, a code asked) are kept in /data. A
+// pause of the Fluidra API does not stop the token renewals (one of Cognito
+// does). index.js only wires the SDK handlers to this class.
 // -----------------------------------------------------------------------------
 
 import { DEVICE_TRANSPORTS, createLogger } from '@gladysassistant/integration-sdk';
@@ -32,7 +35,16 @@ import {
   shortId,
   statesOf,
 } from './devices.js';
-import { classify, componentsOf, decode, identify, profileOf, setpointRange } from './fluidra.js';
+import {
+  classify,
+  componentsOf,
+  decode,
+  identify,
+  latestTs,
+  profileOf,
+  setpointRange,
+  writable,
+} from './fluidra.js';
 import { FluidraError, errorReason } from './http.js';
 import { T, age, join, reasonOf, word } from './i18n.js';
 import { StatePublisher } from './publisher.js';
@@ -143,6 +155,8 @@ export class FluidraApp {
     this.retryAt = 0;
     this.offline = false;
     this.failures = 0;
+    /** The 403s on the account in a row, each with a fresh token (kept in /data). */
+    this.forbiddenCount = 0;
     this.pausedUntil = 0;
     /** 'rate' (429), 'forbidden' (403): every path waits; 'backoff': the polling only. */
     this.pauseKind = undefined;
@@ -165,13 +179,25 @@ export class FluidraApp {
     this.config = normalizeConfig(raw);
     this.reset();
     this.memory = normalizeMemory(await this.store.load().catch(() => null), this.now());
+    if (!this.config.username || !this.config.password) {
+      // Nothing is read without credentials, and /data is left as it is: the
+      // stop of the account (a code asked) is still there when they come back.
+      this.client.configure({ username: this.config.username, password: '', tokens: null });
+      this.publisher.start();
+      await this.setStatus(false, T.noCredentials);
+      return;
+    }
     const { account } = this.config;
     if (this.memory.account !== account) {
-      // Another account: its tokens and its stops are not this one's. A 429 pause stays.
-      this.memory = { ...this.memory, account, tokens: null, block: null };
+      // Another account: its tokens, its stops and its 403s are not this one's. A pause stays.
+      this.memory = { ...this.memory, account, tokens: null, block: null, forbidden: 0 };
     }
     if (fresh) {
-      this.memory.block = null;
+      // New credentials lift the stops, but a code asked for this same account:
+      // each sign-in could send one, only the test button tries again.
+      if (this.memory.block?.kind !== 'two_factor') {
+        this.memory.block = null;
+      }
       this.memory.tokens = null;
     }
     const { pause, block } = this.memory;
@@ -179,15 +205,16 @@ export class FluidraApp {
       this.pausedUntil = pause.until;
       this.pauseKind = pause.kind;
       this.pauseSource = pause.source;
+      if (pause.kind === 'backoff') {
+        this.failures = pause.failures;
+      }
     }
+    this.forbiddenCount = this.memory.forbidden ?? 0;
     if (block) {
       this.blocked = block.kind;
       this.blockDetail = block.detail;
       this.retries = block.retries;
       this.retryAt = block.retryAt ?? 0;
-    }
-    if (!this.config.username || !this.config.password) {
-      this.memory.tokens = null;
     }
     this.client.configure({
       username: this.config.username,
@@ -196,17 +223,13 @@ export class FluidraApp {
     });
     await this.saveMemory();
     this.publisher.start();
-    if (!this.client.hasCredentials) {
-      await this.setStatus(false, T.noCredentials);
-      return;
-    }
     this.scheduleRenew();
     if (this.blocked) {
       await this.setStatus(false, this.blockedMessage());
       this.scheduleNext();
       return;
     }
-    await this.setStatus(false, this.pauseMessage() ?? T.connecting);
+    await this.setStatus(false, this.pauseMessage({ backoff: true }) ?? T.connecting);
     await this.tick();
   }
 
@@ -324,6 +347,7 @@ export class FluidraApp {
     this.retryAt = 0;
     this.offline = false;
     this.failures = 0;
+    this.forbiddenCount = 0;
     if (this.pauseKind !== 'rate' || this.now() >= this.pausedUntil) {
       this.pausedUntil = 0;
       this.pauseKind = undefined;
@@ -396,13 +420,21 @@ export class FluidraApp {
       .catch((err) => this.logger.warn(`Saving the state to /data failed: ${err.message}`));
   }
 
-  /** The tokens, the pause and the stop, with the account they belong to. */
+  /** The tokens, the pause, the 403s in a row and the stop, with the account they belong to. */
   async persist() {
     this.memory.account = this.config.account;
     this.memory.tokens = this.client.tokens ? { ...this.client.tokens } : null;
-    this.memory.pause = this.hardPaused
-      ? { kind: this.pauseKind, until: this.pausedUntil, source: this.pauseSource ?? 'api' }
-      : null;
+    // The backoff too (5xx, network): a restart does not read again at once.
+    this.memory.pause =
+      this.pauseKind && this.now() < this.pausedUntil
+        ? {
+            kind: this.pauseKind,
+            until: this.pausedUntil,
+            source: this.pauseSource ?? 'api',
+            ...(this.pauseKind === 'backoff' ? { failures: this.failures } : {}),
+          }
+        : null;
+    this.memory.forbidden = this.forbiddenCount;
     this.memory.block = this.blocked
       ? {
           kind: this.blocked,
@@ -491,8 +523,9 @@ export class FluidraApp {
       }
       this.readAt = this.now();
       await this.publishDevices();
-      const hadStop = this.retries > 0 || this.pauseKind !== undefined;
+      const hadStop = this.retries > 0 || this.pauseKind !== undefined || this.forbiddenCount > 0;
       this.failures = 0;
+      this.forbiddenCount = 0;
       this.retries = 0;
       this.retryAt = 0;
       this.offline = false;
@@ -623,7 +656,10 @@ export class FluidraApp {
           this.logger.warn(`Fluidra device ${short(entry.id)}: ${errorReason(err)}`);
         }
         this.unreadable.set(entry.id, err.kind);
-        this.devices.get(entry.id).entry = entry;
+        const device = this.devices.get(entry.id);
+        device.entry = entry;
+        // Nothing read this time corroborates a "disconnected" report.
+        device.live = false;
         return err;
       }
       if (!profile) {
@@ -698,16 +734,46 @@ export class FluidraApp {
     return components;
   }
 
-  /** The values of one device as read: kept, and its states queued. */
-  ingest(entry, profile, components, created = this.createdFeatures()) {
+  /**
+   * The values of one device as read: kept, and its states queued. A poll
+   * also decides whether the device takes commands (writable()) and how many
+   * "disconnected" reports in a row it has; `command` (the read just before a
+   * command) changes neither.
+   */
+  ingest(entry, profile, components, created = this.createdFeatures(), { command = false } = {}) {
     const previous = this.devices.get(entry.id);
     const values = decode(profile, components);
     const seen = previous?.seen ?? new Set();
     for (const key of Object.keys(values)) {
       seen.add(key);
     }
-    const offline = entry.online === false ? (previous?.offline ?? 0) + 1 : 0;
-    const device = { entry, profile, values, seen, offline, readAt: this.now() };
+    let { offline = 0, live = false, ts, canWrite = false } = previous ?? {};
+    if (!command) {
+      const latest = latestTs(components);
+      // A bridged child can report "disconnected" on every read while its data
+      // is live (foXaCe sensor/chlorinator.py): a component `ts` that moved
+      // since the last read corroborates it; a missing or unchanged one does not.
+      live =
+        entry.online === false &&
+        entry.parentId !== undefined &&
+        latest !== undefined &&
+        ts !== undefined &&
+        latest !== ts;
+      ts = latest;
+      offline = entry.online === false && !live ? offline + 1 : 0;
+      canWrite = writable(profile, entry, components);
+    }
+    const device = {
+      entry,
+      profile,
+      values,
+      seen,
+      offline,
+      live,
+      ts,
+      canWrite,
+      readAt: this.now(),
+    };
     this.devices.set(entry.id, device);
     this.queue(device, created);
     return device;
@@ -777,8 +843,9 @@ export class FluidraApp {
       message = T.rateLimited(age(wait));
     } else if (err.kind === 'forbidden') {
       wait = this.forbid();
+      this.forbiddenCount += 1;
       this.offline = true;
-      message = T.forbidden(age(wait));
+      message = this.forbiddenMessage(age(wait));
     } else {
       // Never read again faster than the poll interval.
       wait = Math.max(
@@ -807,6 +874,16 @@ export class FluidraApp {
     this.pausedUntil = Math.max(this.pausedUntil, this.now() + wait);
     this.pauseKind = 'rate';
     return wait;
+  }
+
+  /**
+   * The message of a 403 pause: after a few in a row (each with a fresh
+   * token), it says Fluidra may be filtering this client.
+   */
+  forbiddenMessage(wait) {
+    return this.forbiddenCount >= TIMINGS.forbiddenNotice
+      ? T.filtered(wait, this.forbiddenCount)
+      : T.forbidden(wait);
   }
 
   /** The account endpoint refused a fresh token (403): a 30-minute pause; a 429 pause stays. */
@@ -1021,6 +1098,11 @@ export class FluidraApp {
     if (!device || commandRoleOf(device.profile) !== target.role) {
       throw this.refusal(T.denied.unknownDevice);
     }
+    if (!device.canWrite) {
+      // Recognized by a name, a model or a family only, or contradicted by
+      // what the cloud says: shown, never written to (src/fluidra.js writable()).
+      throw this.refusal(T.denied.notWritable);
+    }
     const checked = this.commandValue(target.role, value, device.profile);
     return this.serialized(target.id, () =>
       this.command(target.id, target.role, checked, receivedAt),
@@ -1054,8 +1136,13 @@ export class FluidraApp {
     if (!this.client.hasCredentials) {
       throw this.refusal(T.denied.noConfig);
     }
-    if (!this.devices.has(id)) {
+    const device = this.devices.get(id);
+    if (!device) {
       throw this.refusal(T.denied.unknownDevice);
+    }
+    if (device.entry.online === false && !device.live) {
+      // The last device tree says it is not connected (and nothing read says otherwise).
+      throw this.refusal(T.denied.disconnected);
     }
     if (this.blocked) {
       throw this.refusal(T.denied.stopped);
@@ -1063,10 +1150,15 @@ export class FluidraApp {
     if (this.hardPaused) {
       throw this.refusal(this.pauseKind === 'forbidden' ? T.denied.forbidden : T.denied.paused);
     }
-    if (!this.client.tokenValidFor(TIMINGS.commandTokenValidity)) {
+    // Valid 60 s more (less for a short-lived token, never under the command's own span).
+    const validity = Math.max(
+      TIMINGS.commandAnswerBy + 1_000,
+      Math.min(TIMINGS.commandTokenValidity, this.client.margin),
+    );
+    if (!this.client.tokenValidFor(validity)) {
       // A renewal inside the 3.5 s would leave too little time: renewed now, refused.
       this.client
-        .token({ signIn: false, validity: TIMINGS.commandTokenValidity })
+        .token({ signIn: false, validity })
         .catch((err) => this.renewFailed(err, generation));
       throw this.refusal(T.denied.session);
     }
@@ -1155,7 +1247,18 @@ export class FluidraApp {
       return;
     }
     this.checkBeforeSend(generation);
-    await this.send(id, 9, 1, receivedAt);
+    try {
+      await this.send(id, 9, 1, receivedAt);
+    } catch (err) {
+      const cause = err.cause ?? err;
+      if (MAYBE_SENT.has(cause.kind)) {
+        // The start may have reached Fluidra; the speed was never sent.
+        throw new Error(word(T.startMaybeSent(reasonOf(cause)), this.config.language), {
+          cause: err,
+        });
+      }
+      throw err;
+    }
     this.logger.info(`Fluidra device ${short(id)}: pump start sent`);
     try {
       this.checkBeforeSend(generation);
@@ -1180,7 +1283,7 @@ export class FluidraApp {
   async readFresh(id, profile, receivedAt) {
     let components;
     try {
-      components = await this.readComponents(id, componentsOf(profile), {
+      components = await this.readComponents(id, componentsOf(profile, { command: true }), {
         retry: false,
         signIn: false,
         validity: TIMINGS.commandAnswerBy,
@@ -1205,7 +1308,7 @@ export class FluidraApp {
       throw this.refusal(T.denied.unreadable, err);
     }
     const device = this.devices.get(id);
-    const fresh = this.ingest(device.entry, profile, components);
+    const fresh = this.ingest(device.entry, profile, components, undefined, { command: true });
     this.unreadable.delete(id);
     // The ack never waits for Gladys: the states go on their own.
     this.flush();
@@ -1252,8 +1355,15 @@ export class FluidraApp {
     }
   }
 
-  /** A few reads after a command, to show its effect. */
+  /**
+   * A few reads after a command, to show its effect. A new command replaces
+   * the follow-up reads of the previous one (never three per command).
+   */
   followUp() {
+    for (const handle of this.followUpTimers) {
+      this.timers.clearTimeout(handle);
+    }
+    this.followUpTimers.clear();
     const generation = this.generation;
     for (const delay of TIMINGS.followUps) {
       const handle = this.timers.setTimeout(() => {
@@ -1268,8 +1378,12 @@ export class FluidraApp {
 
   // --- Configuration button --------------------------------------------------
 
-  /** A 429 or 403 pause holds for every path, the button included. */
-  pauseMessage() {
+  /**
+   * A 429 or 403 pause holds for every path, the button included; `backoff`:
+   * the message of a backoff kept across a restart too (the button is not
+   * held by it).
+   */
+  pauseMessage({ backoff = false } = {}) {
     const left = this.pausedUntil - this.now();
     if (left <= 0) {
       return undefined;
@@ -1277,7 +1391,10 @@ export class FluidraApp {
     if (this.pauseKind === 'rate') {
       return T.rateLimited(age(left));
     }
-    return this.pauseKind === 'forbidden' ? T.forbidden(age(left)) : undefined;
+    if (this.pauseKind === 'forbidden') {
+      return this.forbiddenMessage(age(left));
+    }
+    return backoff && this.pauseKind === 'backoff' ? T.backoffKept(age(left)) : undefined;
   }
 
   async testConnection() {

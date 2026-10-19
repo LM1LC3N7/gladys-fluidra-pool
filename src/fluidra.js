@@ -131,9 +131,25 @@ export function parseComponents(data) {
     if (components.size >= LIMITS.components) {
       break;
     }
-    components.set(id, { reported: component.reportedValue, desired: component.desiredValue });
+    const value = { reported: component.reportedValue, desired: component.desiredValue };
+    // The time of the last report of the component (foXaCe `ts`), when it is a plain number.
+    if (Number.isFinite(component.ts) && component.ts > 0) {
+      value.ts = component.ts;
+    }
+    components.set(id, value);
   }
   return components.size > 0 ? components : undefined;
+}
+
+/** The latest `ts` of a set of components, or undefined when none has one. */
+export function latestTs(components) {
+  let latest;
+  for (const { ts } of components?.values() ?? []) {
+    if (ts !== undefined && (latest === undefined || ts > latest)) {
+      latest = ts;
+    }
+  }
+  return latest;
 }
 
 // --- Values --------------------------------------------------------------------
@@ -233,24 +249,33 @@ const Z650 = {
 /**
  * Water analysers and chlorinators: `[component, divisor]` of each reading;
  * `level`: the chlorination setpoint (%), `production`: the real output (%).
+ * The standard tecnoLC2 layout (foXaCe `_standard_tecnolc2`) has no free
+ * chlorine (c178) nor production (c154): foXaCe maps them only on the serials
+ * whose owners showed them (chlorinators.py), so they are added per serial
+ * below, never to the whole family (a unit without the probe must not show
+ * "0 mg/L").
  */
 const TECNO_LC2 = {
   ph: [165, 100],
   orp: [170, 1],
   temperature: [172, 10],
   salinity: [174, 100],
-  freeChlorine: [178, 100],
   level: 10,
-  production: 154,
 };
+const FREE_CHLORINE = [178, 100];
+/**
+ * domoticS2 (foXaCe dm24008702): measured pH c172, ORP c177, temperature
+ * c183, salinity c185; the chlorination target is written on c4 (its read-back
+ * register differs per unit: c164 on the Neolysis DM24008702, c263 on the
+ * Cell Guard LS12 DM24086706, where c164 is the real production), so only c4
+ * is shown, as the setpoint asked, and no production (TODO.md "To check").
+ */
 const DOMOTIC_S2 = {
   ph: [172, 100],
   orp: [177, 1],
   temperature: [183, 10],
   salinity: [185, 100],
-  freeChlorine: [178, 100],
   level: 4,
-  production: 164,
 };
 
 /**
@@ -259,13 +284,24 @@ const DOMOTIC_S2 = {
  * `*` wildcard), `things` (Fluidra's family id, `thingType`), `names` and `models` (both
  * against the device name: the cloud has no model field), `families` (the
  * family label). See identify().
+ *
+ * `thingTypes`: the only `thingType` values the profile accepts (absent is
+ * accepted too); any other known value contradicts it and the profile is
+ * never used. `strong`: the signals that identify the unit itself (serial,
+ * `thingType`, component-7 signature; a name only where foXaCe has nothing
+ * else) — a writable role (setpoint, speed, light) needs one of them; a
+ * name, a model or a family alone never unlocks a command (writable()).
  */
+const AMT_THINGS = ['amt'];
 export const PROFILES = [
   {
     key: 'hpgic',
     kind: 'heat_pump',
     names: ['hpgic'],
     models: ['hpgic'],
+    thingTypes: AMT_THINGS,
+    // Its serial is LG-prefixed and its component 7 reads CXWAB (foXaCe heat_pumps.py).
+    strong: { ids: ['LG*'], signature: ['CXWAB'] },
     layout: AMT,
     priority: 101,
   },
@@ -277,6 +313,7 @@ export const PROFILES = [
     models: ['astralpool'],
     families: ['eco elyo'],
     signature: ['BXWAA', 'BXWAB'],
+    thingTypes: AMT_THINGS,
     layout: AMT,
     priority: 100,
   },
@@ -286,6 +323,7 @@ export const PROFILES = [
     things: ['hpc'],
     names: ['z350', 'z35'],
     models: ['z350', 'z35'],
+    thingTypes: ['hpc'],
     layout: Z350,
     priority: 98,
   },
@@ -295,6 +333,7 @@ export const PROFILES = [
     ids: ['ZB*'],
     names: ['z650', 'z65'],
     models: ['z650', 'z65'],
+    thingTypes: ['nhpp'],
     layout: Z650,
     priority: 98,
   },
@@ -304,6 +343,7 @@ export const PROFILES = [
     ids: ['LF*'],
     signature: ['BXWAD'],
     signatureRequired: true,
+    thingTypes: AMT_THINGS,
     layout: Z260,
     priority: 97,
   },
@@ -313,6 +353,7 @@ export const PROFILES = [
     ids: ['LD*'],
     things: ['zs500'],
     names: ['z550', 'z55'],
+    thingTypes: ['zs500'],
     layout: Z550,
     priority: 96,
   },
@@ -321,22 +362,40 @@ export const PROFILES = [
     kind: 'heat_pump',
     ids: ['LF*'],
     names: ['z250', 'z25'],
+    thingTypes: AMT_THINGS,
     layout: Z260,
     priority: 95,
   },
-  // Serial-specific chlorinators whose layout differs from the tecnoLC2 one.
+  // Serial-specific chlorinators: a layout of their own, or the readings foXaCe
+  // maps on those serials only (free chlorine c178, production c154).
   {
     key: 'cc24058902',
     kind: 'chlorinator',
     ids: ['CC24058902*'],
-    sensors: { ...TECNO_LC2, orp: [177, 1] },
+    sensors: { ...TECNO_LC2, orp: [177, 1], freeChlorine: FREE_CHLORINE },
     priority: 93,
   },
   {
     key: 'energy-connect-bridged',
     kind: 'chlorinator',
     ids: ['CC24054221*', 'CC24041107*'],
-    sensors: { ...TECNO_LC2, orp: undefined, freeChlorine: undefined, salinity: [160, 1000] },
+    sensors: { ...TECNO_LC2, orp: undefined, salinity: [160, 1000], production: 154 },
+    priority: 93,
+  },
+  {
+    // Ducere 21 (foXaCe lc24008202): free chlorine and production.
+    key: 'lc24008202',
+    kind: 'chlorinator',
+    ids: ['LC24008202*'],
+    sensors: { ...TECNO_LC2, freeChlorine: FREE_CHLORINE, production: 154 },
+    priority: 93,
+  },
+  {
+    // foXaCe cc24018202, cc24042517 (Clear Connect Evo 21g): free chlorine.
+    key: 'tecnolc2-free-chlorine',
+    kind: 'chlorinator',
+    ids: ['CC24018202*', 'CC24042517*'],
+    sensors: { ...TECNO_LC2, freeChlorine: FREE_CHLORINE },
     priority: 93,
   },
   {
@@ -394,20 +453,30 @@ export const PROFILES = [
     sensors: DOMOTIC_S2,
     priority: 83,
   },
-  { key: 'e30iq', kind: 'pump', ids: ['E30*', 'LE*', 'PUMP*'], things: ['eppvs'], priority: 50 },
+  {
+    key: 'e30iq',
+    kind: 'pump',
+    ids: ['E30*', 'LE*', 'PUMP*'],
+    things: ['eppvs'],
+    thingTypes: ['eppvs'],
+    priority: 50,
+  },
   {
     key: 'victoria',
     kind: 'pump',
     models: ['victoria smart connect'],
     things: ['mppvs'],
+    thingTypes: ['mppvs'],
     priority: 50,
   },
   {
+    // No family pattern: a "light" family alone says nothing of the registers.
     key: 'lumiplus',
     kind: 'light',
     names: ['lumiplus'],
     things: ['LWM'],
-    families: ['light'],
+    thingTypes: ['LWM'],
+    strong: { things: ['LWM'], names: ['lumiplus'] },
     priority: 40,
   },
 ];
@@ -415,10 +484,9 @@ export const PROFILES = [
 const byKey = new Map(PROFILES.map((p) => [p.key, p]));
 export const profileOf = (key) => byKey.get(key);
 
-/** foXaCe _helpers.py classify_device_type: the coarse type from the family and the name. */
-export function classify(family, name) {
-  const f = family.toLowerCase();
-  const n = name.toLowerCase();
+/** The coarse type the family label alone gives ('unknown' when it says nothing). */
+export function familyType(family) {
+  const f = String(family ?? '').toLowerCase();
   if (f.includes('pump') && /heat|eco|elyo|thermal/.test(f)) {
     return 'heat_pump';
   }
@@ -428,19 +496,39 @@ export function classify(family, name) {
   if (f.includes('pump')) {
     return 'pump';
   }
-  if (/heat|thermal|eco elyo|astralpool/.test(f) || /heat|thermal|eco|elyo/.test(n)) {
-    return 'heat_pump';
-  }
   if (f.includes('chlorinator') || f.includes('electrolyseur')) {
     return 'chlorinator';
   }
-  if (f.includes('heater')) {
-    return 'heater';
+  if (/heat|thermal|eco elyo|astralpool/.test(f)) {
+    return 'heat_pump';
   }
-  if (f.includes('light') || n.includes('lumiplus')) {
+  if (f.includes('light')) {
     return 'light';
   }
-  if (/robot|cleaner/.test(f) || n.includes('cleaner')) {
+  if (/robot|cleaner/.test(f)) {
+    return 'robot';
+  }
+  return 'unknown';
+}
+
+/**
+ * foXaCe _helpers.py classify_device_type: the coarse type from the family,
+ * then (only when the family says nothing) from the name. A name is the
+ * user's own words: "Sel eco" in the Chlorinators family stays a chlorinator.
+ */
+export function classify(family, name) {
+  const type = familyType(family);
+  if (type !== 'unknown') {
+    return type;
+  }
+  const n = String(name ?? '').toLowerCase();
+  if (/heat|thermal|eco|elyo/.test(n)) {
+    return 'heat_pump';
+  }
+  if (n.includes('lumiplus')) {
+    return 'light';
+  }
+  if (n.includes('cleaner')) {
     return 'robot';
   }
   return 'unknown';
@@ -483,21 +571,69 @@ function looksLikeTecnoLc2(components) {
   return c172 !== undefined && c172 >= 30 && c172 <= 520;
 }
 
+/** The component-7 signature string of a read, or ''. */
+const signatureOf = (components) => {
+  const comp7 = components?.get(7)?.reported;
+  return typeof comp7 === 'string' ? comp7 : '';
+};
+
+/**
+ * What the cloud says of a device contradicts the profile: a known
+ * `thingType` the profile does not accept, or a family label of another
+ * coarse type (a Chlorinators entry is never a heat pump).
+ */
+export function contradicts(profile, device) {
+  const thing = String(device.thingType ?? '').toLowerCase();
+  if (profile.thingTypes && thing !== '') {
+    if (!profile.thingTypes.some((t) => t.toLowerCase() === thing)) {
+      return true;
+    }
+  }
+  const type = familyType(device.family);
+  return type !== 'unknown' && type !== profile.kind;
+}
+
+/**
+ * A command may be sent to a device under this profile: nothing contradicts
+ * it and one strong signal of the profile itself matches (its serial, its
+ * `thingType`, its component-7 signature; a LumiPlus by its name). A name, a
+ * model or a family alone never does. `components`: the last read.
+ */
+export function writable(profile, device, components) {
+  if (!profile || contradicts(profile, device)) {
+    return false;
+  }
+  const strong = profile.strong ?? {
+    ids: profile.ids,
+    things: profile.things,
+    signature: profile.signature,
+  };
+  return (
+    matches(device.id, strong.ids) ||
+    matches(device.thingType, strong.things) ||
+    matches(signatureOf(components), strong.signature) ||
+    matches(device.name, strong.names)
+  );
+}
+
 /**
  * The profile of a device (foXaCe identifier.py scoring): serial 50, family
  * id 25, name 30, family label 20, model 20, plus 10 when the coarse type agrees; the
  * component-7 signature of the LG (BXWAA/BXWAB) and Z260iQ (BXWAD) heat
  * pumps adds 100, and the Z260iQ profile needs it. A profile matched only by
- * the coarse type is never used. A chlorinator nobody claims is tecnoLC2 when
+ * the coarse type is never used, nor one the `thingType` or the family
+ * contradicts (contradicts()). A chlorinator nobody claims is tecnoLC2 when
  * its registers say so. `components`: the last read, when there is one.
  */
 export function identify(device, components) {
   const type = classify(device.family, device.name);
-  const comp7 = components?.get(7)?.reported;
-  const signature = typeof comp7 === 'string' ? comp7 : '';
+  const signature = signatureOf(components);
   let best;
   let bestScore = 0;
   for (const profile of PROFILES) {
+    if (contradicts(profile, device)) {
+      continue;
+    }
     let signal = 0;
     if (matches(device.id, profile.ids)) signal += 50;
     if (matches(device.thingType, profile.things)) signal += 25;
@@ -527,9 +663,13 @@ export function identify(device, components) {
   return best;
 }
 
-/** The components a profile reads (and what identify() needs to look at). */
-export function componentsOf(profile) {
-  const ids = new Set([7, 8, 172]);
+/**
+ * The components a profile reads, and what identify() and writable() need to
+ * look at (c7, c8, c172) unless `command`: the read just before a command
+ * needs the values of the profile only.
+ */
+export function componentsOf(profile, { command = false } = {}) {
+  const ids = new Set(command ? [] : [7, 8, 172]);
   if (profile?.layout) {
     const l = profile.layout;
     [l.on, l.setpoint, l.water?.[0], l.air?.[0], l.mode?.[0]].forEach((c) => c && ids.add(c));
@@ -543,6 +683,9 @@ export function componentsOf(profile) {
   if (profile?.kind === 'light') ids.add(11);
   return [...ids].sort((a, b) => a - b);
 }
+
+const VICTORIA_ON = new Set(['RUNNING', 'PRIMING']);
+const VICTORIA_OFF = new Set(['NOT RUNNING', 'STOP', 'STOPPED']);
 
 /** The value a component reports (its `reportedValue`). */
 const at = (components, id) => (id === undefined ? undefined : components.get(id)?.reported);
@@ -580,8 +723,11 @@ export function decode(profile, components) {
     const level = numberOf(get(11));
     values.level = Number.isInteger(level) && level >= 0 && level <= 2 ? level : undefined;
   } else if (profile.key === 'victoria') {
-    const state = get(14);
-    values.running = state === 'RUNNING' ? 1 : state === 'NOT RUNNING' ? 0 : undefined;
+    // foXaCe coordinator.py: RUNNING and PRIMING (the self-priming spin-up) are
+    // running, compared trimmed and in capitals; only a known stop word is off.
+    const raw = get(14);
+    const state = typeof raw === 'string' ? raw.trim().toUpperCase() : undefined;
+    values.running = VICTORIA_ON.has(state) ? 1 : VICTORIA_OFF.has(state) ? 0 : undefined;
     values.speedPercent = percent(get(21));
     values.power = scaled(get(22), 1, { min: 0, max: 10_000, digits: 0 });
   } else if (profile.kind === 'light') {
