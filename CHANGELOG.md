@@ -12,6 +12,10 @@ the notes of the version's GitHub Release.
 
 ### Changed
 
+- Turning the pool **light off** no longer needs "Allow commands from Gladys"
+  and goes even during a pause of the Fluidra API or while the account is
+  stopped (as long as the session is valid). Turning it on, the pump speed
+  and the setpoint stay behind the option.
 - Integration SDK 0.16.1 (no change for the devices); the test runner stops a
   hanging test after 60 s.
 

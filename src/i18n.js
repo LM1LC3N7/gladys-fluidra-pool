@@ -199,8 +199,8 @@ export const T = {
       "Le compte Fluidra n'est pas configuré.",
     ),
     commands: both(
-      'Commands from Gladys are turned off: allow them in the configuration of the integration.',
-      "Les commandes depuis Gladys sont désactivées : autorisez-les dans la configuration de l'intégration.",
+      'Commands from Gladys are turned off: allow them in the configuration of the integration (the light off never needs it).',
+      "Les commandes depuis Gladys sont désactivées : autorisez-les dans la configuration de l'intégration (éteindre l'éclairage n'en a jamais besoin).",
     ),
     stopped: both(
       'The Fluidra account is not connected (see the status of the integration): command refused.',

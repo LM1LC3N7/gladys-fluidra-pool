@@ -5,8 +5,9 @@
 (the unofficial API of the Fluidra Pool app): chlorinators and water
 analysers (water temperature, pH, ORP, salinity, free chlorine, production),
 filtration pumps (running, speed), heat pumps (water temperature, setpoint,
-mode) and pool lights. The pump speed, the lights and the heat pump setpoint
-stay read only until the user allows commands; no chemical dosing command.
+mode) and pool lights. The pump speed, the lights on and the heat pump setpoint
+stay read only until the user allows commands (the light off always goes); no
+chemical dosing command.
 Unofficial, not affiliated with Fluidra.
 
 User documentation: [docs/en.md](docs/en.md) · [docs/fr.md](docs/fr.md).

@@ -168,6 +168,14 @@ up to date at the end of every milestone.
   `unknown/unknown` without a unit (none listed): the unit is in the name.
 - **Commands behind one option** `allow_commands` (off by default, brief):
   refused before any request when off, checked again right before sending.
+  **Except the light off** (wave 15 review r1, rule "switching off is never
+  blocked"): `isProtective` in `src/app.js`, sent without the option, during
+  a 429/403 pause, while the account is stopped and without a fresh read, as
+  long as the token lasts until the answer (no sign-in with refused
+  credentials). **The pump stop stays behind the option**: stopping the
+  filtration also cuts the water flow to the chlorinator and the heat pump,
+  so the running pump is the safe state of a pool and the stop is not a
+  protective command here; pending Louis's confirmation.
   Pump speed is a `text/select` (off, low, medium, high, auto shown only);
   the light is `light/binary` as the brief asks for a switch (a pool light
   turned on or off by an "everything on/off" is harmless; the pump is never a

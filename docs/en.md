@@ -68,9 +68,15 @@ Commands are **off by default**: everything is shown, nothing is changed. Turn
 - the **speed of the E30iQ pump** (a list: off, low, medium, high). Choosing
   a speed on a stopped pump starts it, then sets the speed. Refused while the
   pump follows its schedule (automatic mode): that mode is set in the app;
-- the LumiPlus **light** (on, off);
+- the LumiPlus **light** on (**off** never needs the option: it goes even
+  during a pause of the Fluidra API or while the account is stopped, as long
+  as the session is still valid);
 - the **heat pump setpoint**, within the range of its model and **35 °C at
   most**, by steps of 1 °C (0.5 °C on the Z650iQ).
+
+The pump **stop** stays behind the option: stopping the filtration also cuts
+the water flow to the chlorinator and the heat pump, so the running pump is
+the safe state of a pool (pending Louis's confirmation).
 
 **No chemical dosing command** (pH, chlorine, chlorinator production, boost):
 wrong dosing puts the bathers at risk, and the integration has never been

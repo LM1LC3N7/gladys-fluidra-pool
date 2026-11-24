@@ -12,7 +12,8 @@ import { accountKey } from '../src/config.js';
 import { ACTIONS, API } from '../src/constants.js';
 import { registerHandlers } from '../src/handlers.js';
 import { FluidraError } from '../src/http.js';
-import { HOUR, MINUTE, NOW, PASSWORD, SECOND, USERNAME } from './fixtures/fluidra.js';
+import { ROLES } from '../src/devices.js';
+import { HOUR, MINUTE, NOW, PASSWORD, SECOND, USERNAME, components } from './fixtures/fluidra.js';
 import { assertCoreDevice } from './helpers/coreFeature.js';
 import {
   API_URL,
@@ -27,6 +28,11 @@ import {
 const CONFIG = { username: USERNAME, password: PASSWORD };
 const ALLOW = { ...CONFIG, allow_commands: true };
 const dev = (id) => `ext:test-integration:fluidra:${id}`;
+const VICTORIA = 'VC24000001';
+const FREE_CHLORINE = 'CC24018202.nn_1';
+const PRODUCTION = 'LC24008202.nn_1';
+/** The features of the 7 devices of the min/max test (every role once at least). */
+const FEATURE_COUNT = 30;
 
 /** A logger keeping every line, to check that no secret ever reaches the logs. */
 const recorder = (logs) =>
@@ -372,16 +378,57 @@ test('the status and the Discovery list are sent again at each reconnection', as
 
 // --- Commands ------------------------------------------------------------------
 
-test('every feature has a numeric min and max and the other core fields, in both languages', async (t) => {
+test('every feature of every role has a numeric min and max and the other core fields, in both languages', async (t) => {
   for (const language of ['fr', 'en']) {
     await t.test(language, async (tt) => {
-      const { gladys } = await setup(tt, { config: { ...CONFIG, language }, create: false });
-      assert.equal(gladys.fake.discoveredDevices.length, 4);
+      const server = fakeFluidra();
+      // A Victoria pump (speed-percent, power), a free-chlorine and a
+      // production chlorinator complete the fixtures: the 16 roles are all published.
+      server.tree.push({
+        id: VICTORIA,
+        type: 'connected',
+        info: { name: 'Victoria Smart Connect', family: 'Filtration Pumps' },
+        thingType: 'mppvs',
+      });
+      server.components[VICTORIA] = { 14: 'RUNNING', 21: 50, 22: 600 };
+      server.tree.push({
+        id: FREE_CHLORINE,
+        type: 'connected',
+        info: { name: 'Clear Connect Evo', family: 'Chlorinators' },
+        thingType: 'tecnoLC2',
+      });
+      server.components[FREE_CHLORINE] = {
+        ...components()[IDS.chlorinator],
+        0: FREE_CHLORINE,
+        178: 120,
+      };
+      server.tree.push({
+        id: PRODUCTION,
+        type: 'connected',
+        info: { name: 'Ducere 21', family: 'Chlorinators' },
+        thingType: 'tecnoLC2',
+      });
+      server.components[PRODUCTION] = {
+        ...components()[IDS.chlorinator],
+        0: PRODUCTION,
+        178: 120,
+      };
+      const { gladys } = await setup(tt, {
+        server,
+        config: { ...CONFIG, language },
+        create: false,
+      });
+      assert.equal(gladys.fake.discoveredDevices.length, 7);
       let features = 0;
+      const roles = new Set();
       for (const device of gladys.fake.discoveredDevices) {
         features += assertCoreDevice(device, `${language} ${device.external_id}`);
+        for (const f of device.features) {
+          roles.add(f.external_id.split(':').pop());
+        }
       }
-      assert.ok(features >= 4, String(features));
+      assert.deepEqual([...roles].sort(), [...ROLES].sort(), 'every role published');
+      assert.equal(features, FEATURE_COUNT);
     });
   }
 });
@@ -400,6 +447,73 @@ test('commands are off by default: refused, nothing read nor sent', async (t) =>
   }
   assert.equal(server.api().length, before);
   assert.deepEqual(server.writes(), []);
+  // The pump stop stays behind the option (TODO.md "Decisions"): the running
+  // pump is the safe state of a pool.
+  const stop = await set(gladys, IDS.pump, 'speed', 'off');
+  assert.equal(stop.success, false);
+  assert.match(stop.error, /désactivées/);
+  assert.deepEqual(server.writes(), []);
+});
+
+test('the light off never needs the option: a fresh read, then "0" on component 11', async (t) => {
+  const { gladys, server } = await setup(t);
+  server.set(IDS.light, 11, '1');
+  const before = server.api().length;
+  const ack = await set(gladys, IDS.light, 'light', 0);
+  assert.equal(ack.success, true, ack.error);
+  assert.equal(server.api().length, before + 2, 'one read, one write');
+  assert.deepEqual(server.writes(), [{ id: IDS.light, component: 11, desiredValue: '0' }]);
+  // Already off: nothing sent. On: still refused.
+  server.set(IDS.light, 11, '0');
+  assert.equal((await set(gladys, IDS.light, 'light', 0)).success, true);
+  assert.equal(server.writes().length, 1);
+  const on = await set(gladys, IDS.light, 'light', 1);
+  assert.equal(on.success, false);
+  assert.match(on.error, /désactivées/);
+  assert.equal(server.writes().length, 1);
+});
+
+test('the light off goes during a 429 pause and with a token about to expire; the light on does not', async (t) => {
+  const { gladys, server, app } = await setup(t, { config: ALLOW });
+  server.queue.push({ match: to.pools, status: 429, body: {}, headers: { 'retry-after': '900' } });
+  await app.tick();
+  assert.equal(app.hardPaused, true);
+  server.set(IDS.light, 11, '1');
+  assert.equal((await set(gladys, IDS.light, 'light', 1)).success, false, 'on: paused');
+  const off = await set(gladys, IDS.light, 'light', 0);
+  assert.equal(off.success, true, off.error);
+  assert.deepEqual(server.writes(), [{ id: IDS.light, component: 11, desiredValue: '0' }]);
+  // A token valid for 30 s more: too short for the other commands, enough for the off.
+  app.client.tokens = { ...app.client.tokens, expiresAt: Date.now() + 30 * SECOND };
+  server.set(IDS.light, 11, '1');
+  assert.match((await set(gladys, IDS.light, 'light', 1)).error, /pause/);
+  assert.equal((await set(gladys, IDS.light, 'light', 0)).success, true);
+  assert.equal(server.writes().length, 2);
+  // A token that cannot last until the answer: refused (no sign-in for a command).
+  app.client.tokens = { ...app.client.tokens, expiresAt: Date.now() + 2 * SECOND };
+  server.set(IDS.light, 11, '1');
+  const late = await set(gladys, IDS.light, 'light', 0);
+  assert.equal(late.success, false);
+  assert.match(late.error, /renouvellement/);
+  assert.equal(server.writes().length, 2);
+});
+
+test('the light off goes while the account is stopped (refused credentials), with the token it still has', async (t) => {
+  const { gladys, server, app } = await setup(t, { config: ALLOW });
+  // The next sign-in is refused: the integration stops, the current token lasts.
+  server.password = 'another';
+  await app.client.token({ force: true, signIn: true }).catch(() => {});
+  app.client.tokens = { ...app.client.tokens, refreshToken: undefined };
+  server.queue.push({ match: to.pools, status: 401, body: {} });
+  await app.tick();
+  assert.ok(app.blocked, 'the account is stopped');
+  server.set(IDS.light, 11, '1');
+  const on = await set(gladys, IDS.light, 'light', 1);
+  assert.equal(on.success, false);
+  assert.match(on.error, /n'est pas connecté/);
+  const off = await set(gladys, IDS.light, 'light', 0);
+  assert.equal(off.success, true, off.error);
+  assert.deepEqual(server.writes(), [{ id: IDS.light, component: 11, desiredValue: '0' }]);
 });
 
 test('the light: a fresh read, then "1" on component 11', async (t) => {
@@ -469,15 +583,23 @@ test('a command decides on a fresh read, never on memory', async (t) => {
   const ack = await set(gladys, IDS.light, 'light', 1);
   assert.equal(ack.success, true);
   assert.deepEqual(server.writes(), [], 'already on');
+  server.set(IDS.light, 11, '0');
   server.queue.push({ match: to.bulk(IDS.light), status: 503, body: {} });
-  const failed = await set(gladys, IDS.light, 'light', 0);
+  const failed = await set(gladys, IDS.light, 'light', 1);
   assert.equal(failed.success, false);
   assert.match(failed.error, /n'a pas pu être relu/);
   server.set(IDS.light, 11, null);
-  const unknown = await set(gladys, IDS.light, 'light', 0);
+  const unknown = await set(gladys, IDS.light, 'light', 1);
   assert.equal(unknown.success, false);
   assert.match(unknown.error, /n'a pas donné la valeur/);
   assert.deepEqual(server.writes(), []);
+  // The light off is protective: a failed read, or no value, never holds it back.
+  server.queue.push({ match: to.bulk(IDS.light), status: 503, body: {} });
+  assert.equal((await set(gladys, IDS.light, 'light', 0)).success, true);
+  assert.deepEqual(
+    server.writes().map((w) => w.desiredValue),
+    ['0'],
+  );
 });
 
 test('the option is checked again right before sending', async (t) => {

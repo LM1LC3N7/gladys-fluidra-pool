@@ -79,8 +79,8 @@
         "fr": "Autoriser les commandes depuis Gladys (vitesse de la pompe, éclairage, consigne de la pompe à chaleur)"
       },
       "description": {
-        "en": "Off by default: everything is shown, nothing is changed. On, a scene or a dashboard can stop or start the filtration pump, switch the pool lights and change the heat pump setpoint (35 °C at most) while nobody is there. Chemical dosing (pH, chlorine) is never commanded.",
-        "fr": "Désactivé par défaut : tout est affiché, rien n'est modifié. Activé, une scène ou un tableau de bord peut arrêter ou démarrer la pompe de filtration, allumer l'éclairage et changer la consigne de la pompe à chaleur (35 °C au plus) en votre absence. Le dosage chimique (pH, chlore) n'est jamais commandé."
+        "en": "Off by default: everything is shown, nothing is changed. On, a scene or a dashboard can stop or start the filtration pump, turn the pool lights on and change the heat pump setpoint (35 °C at most) while nobody is there. Turning the lights off never needs it. Chemical dosing (pH, chlorine) is never commanded.",
+        "fr": "Désactivé par défaut : tout est affiché, rien n'est modifié. Activé, une scène ou un tableau de bord peut arrêter ou démarrer la pompe de filtration, allumer l'éclairage et changer la consigne de la pompe à chaleur (35 °C au plus) en votre absence. Éteindre l'éclairage n'en a jamais besoin. Le dosage chimique (pH, chlore) n'est jamais commandé."
       },
       "required": false,
       "default": false

@@ -57,6 +57,12 @@ test/                             node --test, the SDK's fake Gladys + a fake Fl
 
 ## Rules
 
+- **The light off is the only protective command** (`isProtective`,
+  src/app.js): never behind `allow_commands`, nor a 429/403 pause, nor a
+  blocked account, nor the fresh read; only a token valid for its span. The
+  pump stop stays behind the option (stopping the filtration also cuts the
+  chlorinator and the heat pump: the running pump is the safe state), pending
+  Louis's confirmation; see TODO.md "Decisions".
 - **Features follow the core model.** Every feature has a non-empty `name`, a
   numeric `min` and `max` (0/0 for text and buttons), boolean `read_only` and
   `has_feedback`: Gladys refuses it otherwise, and the SDK's fake Gladys

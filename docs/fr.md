@@ -76,9 +76,15 @@ modifié. Activez **Autoriser les commandes depuis Gladys** pour permettre :
   rapide). Choisir une vitesse sur une pompe arrêtée la démarre puis règle la
   vitesse. Refusé quand la pompe suit sa programmation (mode automatique) :
   ce mode se règle dans l'application ;
-- l'**éclairage** LumiPlus (allumer, éteindre) ;
+- allumer l'**éclairage** LumiPlus (l'**éteindre** n'a jamais besoin de
+  l'option : cela part même pendant une pause de l'API Fluidra ou quand le
+  compte est arrêté, tant que la session est encore valide) ;
 - la **consigne de la pompe à chaleur**, dans la plage de son modèle et
   **35 °C au plus**, par pas de 1 °C (0,5 °C sur la Z650iQ).
+
+L'**arrêt de la pompe** reste derrière l'option : arrêter la filtration coupe
+aussi l'eau vers l'électrolyseur et la pompe à chaleur, la pompe en marche est
+donc l'état sûr d'une piscine (en attente de la confirmation de Louis).
 
 **Aucune commande de dosage chimique** (pH, chlore, production de
 l'électrolyseur, boost) : un mauvais dosage met les baigneurs en danger, et

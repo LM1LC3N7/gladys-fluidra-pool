@@ -1134,9 +1134,20 @@ export class FluidraApp {
     return receivedAt + TIMINGS.commandDeadline - this.now();
   }
 
+  /**
+   * The light off is the only protective command of the pool (switching off
+   * is never blocked): it needs neither the option, nor a 429/403 pause to
+   * end, nor the account to be unblocked, nor the fresh read; only a token
+   * that lasts until its answer (no sign-in with refused credentials). The
+   * pump stop is not protective here (see TODO.md "Decisions").
+   */
+  isProtective(role, value) {
+    return role === 'light' && value === GLADYS.OFF;
+  }
+
   /** The checks every command shares, before its read. */
-  checkCommand(id, receivedAt, generation) {
-    if (!this.config.allowCommands) {
+  checkCommand(id, receivedAt, generation, { protective = false } = {}) {
+    if (!protective && !this.config.allowCommands) {
       throw this.refusal(T.denied.commands);
     }
     if (!this.client.hasCredentials) {
@@ -1155,17 +1166,20 @@ export class FluidraApp {
       // The last device tree says it is not connected (and nothing read says otherwise).
       throw this.refusal(T.denied.disconnected);
     }
-    if (this.blocked) {
+    if (!protective && this.blocked) {
       throw this.refusal(T.denied.stopped);
     }
-    if (this.hardPaused) {
+    if (!protective && this.hardPaused) {
       throw this.refusal(this.pauseKind === 'forbidden' ? T.denied.forbidden : T.denied.paused);
     }
-    // Valid 60 s more (less for a short-lived token, never under the command's own span).
-    const validity = Math.max(
-      TIMINGS.commandAnswerBy + 1_000,
-      Math.min(TIMINGS.commandTokenValidity, this.client.margin),
-    );
+    // Valid 60 s more (less for a short-lived token, never under the command's
+    // own span); a protective command only needs its own span.
+    const validity = protective
+      ? TIMINGS.commandAnswerBy + 1_000
+      : Math.max(
+          TIMINGS.commandAnswerBy + 1_000,
+          Math.min(TIMINGS.commandTokenValidity, this.client.margin),
+        );
     if (!this.client.tokenValidFor(validity)) {
       // A renewal inside the 3.5 s would leave too little time: renewed now, refused.
       this.client
@@ -1179,8 +1193,14 @@ export class FluidraApp {
   }
 
   /** Still allowed right before sending: the option, the account, the pauses. */
-  checkBeforeSend(generation) {
-    if (generation !== this.generation || this.blocked || !this.config.allowCommands) {
+  checkBeforeSend(generation, { protective = false } = {}) {
+    if (generation !== this.generation) {
+      throw this.refusal(T.denied.stopped);
+    }
+    if (protective) {
+      return;
+    }
+    if (this.blocked || !this.config.allowCommands) {
       throw this.refusal(this.config.allowCommands ? T.denied.stopped : T.denied.commands);
     }
     if (this.hardPaused) {
@@ -1191,12 +1211,31 @@ export class FluidraApp {
   /** One command: a fresh read, the decision on it, then the write(s). */
   async command(id, role, value, receivedAt) {
     const generation = this.generation;
-    this.checkCommand(id, receivedAt, generation);
+    const protective = this.isProtective(role, value);
+    this.checkCommand(id, receivedAt, generation, { protective });
     const { profile } = this.devices.get(id);
     // The state just before acting, never the one in memory.
-    const fresh = await this.readFresh(id, profile, receivedAt);
+    let fresh;
+    try {
+      fresh = await this.readFresh(id, profile, receivedAt);
+    } catch (err) {
+      // In doubt, the light off goes (a failed read never holds it back).
+      if (!protective || (err.cause ?? err).kind === 'late') {
+        throw err;
+      }
+      this.logger.info(`Fluidra device ${short(id)}: light off sent without a fresh read`);
+    }
     if (this.remaining(receivedAt) <= 0) {
       throw this.refusal(T.denied.late);
+    }
+    if (protective) {
+      if (fresh?.values.light === value) {
+        return;
+      }
+      this.checkBeforeSend(generation, { protective });
+      await this.send(id, 11, String(value), receivedAt);
+      this.logger.info(`Fluidra device ${short(id)}: light off sent`);
+      return;
     }
     if (role === 'speed') {
       return this.setSpeed(id, fresh.values, value, receivedAt, generation);
