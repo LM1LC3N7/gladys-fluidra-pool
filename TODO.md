@@ -230,3 +230,7 @@ up to date at the end of every milestone.
   reference: a public constant of the app, not a secret of the user.
 - **Demo files of the template** (devices, scenes, widgets, weather and their
   tests) removed.
+
+## Next patch
+
+- Migration review minors: see `_lots/migration-reviews/w15-gladys-fluidra-pool-r2.md`.
