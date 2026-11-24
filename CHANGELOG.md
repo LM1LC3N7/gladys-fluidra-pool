@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-24
+
 ### Changed
 
 - Turning the pool **light off** no longer needs "Allow commands from Gladys"
@@ -67,6 +69,7 @@ the notes of the version's GitHub Release.
 - Free chlorine and real production of tecnoLC2 chlorinators only on the
   units known to have them; a Victoria pump priming counts as running.
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-fluidra-pool/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/LM1LC3N7/gladys-fluidra-pool/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/LM1LC3N7/gladys-fluidra-pool/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/LM1LC3N7/gladys-fluidra-pool/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/LM1LC3N7/gladys-fluidra-pool/releases/tag/v0.1.1
