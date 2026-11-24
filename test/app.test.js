@@ -13,6 +13,7 @@ import { ACTIONS, API } from '../src/constants.js';
 import { registerHandlers } from '../src/handlers.js';
 import { FluidraError } from '../src/http.js';
 import { HOUR, MINUTE, NOW, PASSWORD, SECOND, USERNAME } from './fixtures/fluidra.js';
+import { assertCoreDevice } from './helpers/coreFeature.js';
 import {
   API_URL,
   COGNITO_URL,
@@ -370,6 +371,20 @@ test('the status and the Discovery list are sent again at each reconnection', as
 });
 
 // --- Commands ------------------------------------------------------------------
+
+test('every feature has a numeric min and max and the other core fields, in both languages', async (t) => {
+  for (const language of ['fr', 'en']) {
+    await t.test(language, async (tt) => {
+      const { gladys } = await setup(tt, { config: { ...CONFIG, language }, create: false });
+      assert.equal(gladys.fake.discoveredDevices.length, 4);
+      let features = 0;
+      for (const device of gladys.fake.discoveredDevices) {
+        features += assertCoreDevice(device, `${language} ${device.external_id}`);
+      }
+      assert.ok(features >= 4, String(features));
+    });
+  }
+});
 
 test('commands are off by default: refused, nothing read nor sent', async (t) => {
   const { gladys, server } = await setup(t);

@@ -8,7 +8,8 @@ contributors.
 A Gladys Assistant **external integration**: a Node.js service (Node 22+, ESM,
 no build step) that runs in its own sandboxed Docker container and talks to
 Gladys through
-[`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
+[`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js)
+(v0.16),
 its only runtime dependency. It started from the official JavaScript template.
 
 It brings the Fluidra Pool equipment (AstralPool, Zodiac…) into Gladys through
@@ -22,7 +23,7 @@ only read under a profile its users checked, commands stay behind
 
 ```bash
 npm install
-npm test                                  # node --test, the built-in runner
+npm test                                  # node --test --test-timeout=60000
 node --test test/fluidra.test.js          # one file
 node --test --test-name-pattern "pump"    # tests whose name matches
 npm run lint                              # ESLint
@@ -56,6 +57,10 @@ test/                             node --test, the SDK's fake Gladys + a fake Fl
 
 ## Rules
 
+- **Features follow the core model.** Every feature has a non-empty `name`, a
+  numeric `min` and `max` (0/0 for text and buttons), boolean `read_only` and
+  `has_feedback`: Gladys refuses it otherwise, and the SDK's fake Gladys
+  (0.16.1) too; `test/helpers/coreFeature.js` checks every discovered device, in both languages.
 - **External ids are forever.** Build them with
   `gladys.externalIds(type, platformId)`, `platformId` being the unique id the
   platform gives the device (serial, cloud id, MAC), never a label. Gladys keys
